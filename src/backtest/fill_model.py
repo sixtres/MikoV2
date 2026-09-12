@@ -1,28 +1,27 @@
-# YAMA Y-258: R:R 1.4999 net fee taker/maker ayri, PARTIAL_CLOSED
-# YAMA Y-260: slippage min(0.03, 0.10/leverage)
+# YAMA Y-258: R:R 1.4999 net fee taker/maker
+# YAMA Y-260: slippage = min(0.03, 0.10/leverage)
 # YAMA Y-315: sealed TTL 300s
+# YAMA Y-323: Decimal quantize str(Decimal) ROUND_DOWN
 # YAMA Y-353: DI
 
 """
-FillModel - backtest fill simulation.
-
-Y-258: R:R 1.4999, Taker Depth, PARTIAL_CLOSED, latency max(0, normal(100,50))
-Y-260: slippage min(0.03, 0.10/leverage)
-Y-315: sealed TTL 300s
-Y-353: DI, no global instance
+Backtest fill model - taker depth simulation, R:R net fee, latency.
 """
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from enum import Enum
+
 
 class FillStatus(str, Enum):
     FILLED = "FILLED"
     PARTIAL_CLOSED = "PARTIAL_CLOSED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
+
 
 @dataclass(frozen=True, slots=True)
 class FillModelConfig:
@@ -32,14 +31,14 @@ class FillModelConfig:
     leverage: int = 5
     latency_mean_ms: float = 100.0
     latency_std_ms: float = 50.0
-    sealed_ttl_ms: int = 300000  # Y-315 300s
-    rr_min: float = 1.4999  # Y-258
+    sealed_ttl_ms: int = 300000
+    rr_min: float = 1.4999
     depth_levels: int = 10
 
     @property
     def slippage_pct(self) -> float:
-        """Y-260: min(0.03, 0.10/leverage)."""
         return min(0.03, 0.10 / self.leverage)
+
 
 @dataclass(slots=True)
 class FillResult:
@@ -50,21 +49,9 @@ class FillResult:
     latency_ms: int
     reason: str = ""
 
+
 class FillModel:
-    """
-    Backtest fill model.
-
-    Y-258: R:R 1.4999 net fee, taker/maker separate, PARTIAL_CLOSED.
-    Taker Depth simulation, latency max(0, normal(100,50)).
-    Y-315: sealed TTL 300s
-    Y-260: slippage
-    Y-353: DI
-    """
-
-    def __init__(
-        self,
-        config: FillModelConfig,
-    ) -> None:
+    def __init__(self, config: FillModelConfig) -> None:
         self._config = config
 
     def compute_fill(
@@ -74,14 +61,74 @@ class FillModel:
         price: Decimal,
         depth: list[tuple[Decimal, Decimal]],
     ) -> FillResult:
-        """
-        Compute fill against depth.
+        if qty <= Decimal("0"):
+            return FillResult(
+                status=FillStatus.REJECTED,
+                filled_qty=Decimal("0"),
+                filled_price=Decimal("0"),
+                fee=Decimal("0"),
+                latency_ms=0,
+                reason="ZERO_QTY",
+            )
 
-        Y-258: Taker Depth, PARTIAL_CLOSED if insufficient depth.
-        latency = max(0, normal(100,50))
-        R:R >= 1.4999 net fee.
-        """
-        raise NotImplementedError("FAZ 9")
+        if not depth:
+            return FillResult(
+                status=FillStatus.REJECTED,
+                filled_qty=Decimal("0"),
+                filled_price=Decimal("0"),
+                fee=Decimal("0"),
+                latency_ms=0,
+                reason="EMPTY_DEPTH",
+            )
+
+        remaining = qty
+        total_cost = Decimal("0")
+        total_filled = Decimal("0")
+
+        levels = depth[: self._config.depth_levels]
+        for level_price, level_qty in levels:
+            if remaining <= Decimal("0"):
+                break
+            if level_qty <= Decimal("0"):
+                continue
+            take = min(remaining, level_qty)
+            total_cost += take * level_price
+            total_filled += take
+            remaining -= take
+
+        if total_filled == Decimal("0"):
+            return FillResult(
+                status=FillStatus.REJECTED,
+                filled_qty=Decimal("0"),
+                filled_price=Decimal("0"),
+                fee=Decimal("0"),
+                latency_ms=0,
+                reason="NO_LIQUIDITY",
+            )
+
+        avg_price = total_cost / total_filled
+        avg_price = self.apply_slippage(avg_price, side)
+        avg_price = self._quantize(avg_price, 8)
+
+        fee_rate = Decimal(str(self._config.fee_taker))
+        fee = self._quantize(avg_price * total_filled * fee_rate, 8)
+        latency = self.sample_latency()
+
+        if remaining > Decimal("0"):
+            status = FillStatus.PARTIAL_CLOSED
+            reason = "INSUFFICIENT_DEPTH"
+        else:
+            status = FillStatus.FILLED
+            reason = ""
+
+        return FillResult(
+            status=status,
+            filled_qty=total_filled,
+            filled_price=avg_price,
+            fee=fee,
+            latency_ms=latency,
+            reason=reason,
+        )
 
     def check_rr(
         self,
@@ -91,30 +138,44 @@ class FillModel:
         fee_taker: Decimal,
         fee_maker: Decimal,
     ) -> tuple[bool, Decimal]:
-        """
-        Y-258: R:R 1.4999 check.
+        # Y-258 REV5: total_fee = entry*fee_taker + tp*fee_maker
+        total_fee = entry * fee_taker + tp * fee_maker
+        gross_profit = abs(tp - entry)
+        gross_loss = abs(entry - sl)
 
-        net_reward = abs(tp-entry) - fee_taker*entry - fee_maker*tp
-        net_risk = abs(entry-sl) + fee_taker*entry + fee_maker*tp
-        return (rr >= 1.4999, rr)
-        """
-        raise NotImplementedError("FAZ 9")
+        if gross_loss <= Decimal("0"):
+            return False, Decimal("0")
+
+        net_profit = gross_profit - total_fee
+        net_loss = gross_loss + total_fee
+
+        if net_loss <= Decimal("0"):
+            return False, Decimal("0")
+
+        rr = net_profit / net_loss
+        passes = rr >= Decimal(str(self._config.rr_min))
+        return passes, rr
 
     def apply_slippage(self, price: Decimal, side: str) -> Decimal:
-        """Apply slippage based on slippage_pct Y-260."""
-        raise NotImplementedError("FAZ 9")
+        slippage = Decimal(str(self._config.slippage_pct))
+        s = side.lower()
+        if s in ("buy", "long", "bid"):
+            return price * (Decimal("1") + slippage)
+        return price * (Decimal("1") - slippage)
 
     def sample_latency(self) -> int:
-        """
-        Sample latency: max(0, normal(100,50)).
-        Y-258: latency model.
-        """
-        raise NotImplementedError("FAZ 9")
+        try:
+            val = random.normalvariate(
+                self._config.latency_mean_ms, self._config.latency_std_ms
+            )
+        except Exception:
+            val = self._config.latency_mean_ms
+        return max(0, int(val))
 
     def is_sealed_expired(self, sealed_at_ms: int, now_ms: int) -> bool:
-        """
-        Y-315: sealed TTL 300s check.
+        return (now_ms - sealed_at_ms) > self._config.sealed_ttl_ms
 
-        Returns True if now - sealed_at > sealed_ttl_ms.
-        """
-        raise NotImplementedError("FAZ 9")
+    @staticmethod
+    def _quantize(value: Decimal, precision: int) -> Decimal:
+        q = Decimal("1").scaleb(-precision)
+        return value.quantize(q, rounding=ROUND_DOWN)

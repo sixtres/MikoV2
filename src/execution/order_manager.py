@@ -1,75 +1,57 @@
-# YAMA Y-260: slippage = min(0.03, 0.10/leverage) decimal, not bps
+# YAMA Y-258: R:R 1.4999 net fee
+# YAMA Y-260: slippage = min(0.03, 0.10/leverage)
 # YAMA Y-283: FLIP tespitinde emergency_close zorunlu
-# YAMA Y-289: ONE_WAY positionSide "BOTH" zorunlu
+# YAMA Y-289: ONE_WAY positionSide BOTH
 # YAMA Y-291: dust false-positive CLOSED_DUST YASAK
 # YAMA Y-295: FLIP fill_lock deadlock fix lock disina cik
 # YAMA Y-297: retry + filled_by_order advance after commit
-# YAMA Y-302: dust <min_lot DUST_ACKNOWLEDGED
-# YAMA Y-315: sealed_orders TTL 300s dict value {sealed_at_local_ms, exchange_ts_ms, version}
+# YAMA Y-302: dust <min_lot -> DUST_ACKNOWLEDGED
+# YAMA Y-315: sealed_orders TTL 300s
 # YAMA Y-323: Decimal quantize str(Decimal) ROUND_DOWN
-# YAMA Y-339: lock hierarchy fill_lock(2)->sqlite(3)->pacer(4)
-# YAMA Y-350: sqlite(3)->pacer(4)->flush(5)
-# YAMA Y-353: DI, no global
-# YAMA Y-358: asyncio.Lock (fill_lock DI)
+# YAMA Y-339/350: fill(2)->sqlite(3)->pacer(4)->flush(5)
+# YAMA Y-353: DI
+# YAMA Y-358: fill_lock DI
 
 """
-OrderManager - order lifecycle and fill tracking.
+Order manager - fill event handling, slippage, quantize.
 
-Y-260: slippage = min(0.03, 0.10/leverage)
-Y-283: FLIP detection -> emergency_close
-Y-289: ONE_WAY positionSide BOTH
-Y-291: dust false-positive CLOSED_DUST forbidden
-Y-295: FLIP deadlock fix
-Y-297: advance filled_by_order after commit only
-Y-302: dust < min_lot DUST_ACKNOWLEDGED
-Y-315: sealed_orders TTL
-Y-323: Decimal quantize str(Decimal) ROUND_DOWN
-Y-339/350: lock hierarchy fill(2)->sqlite(3)->pacer(4)->flush(5)
+Y-260: slippage min(0.03, 0.10/leverage).
+Y-283: FLIP emergency_close.
+Y-291/Y-302: dust DUST_ACKNOWLEDGED.
+Y-295: FLIP outside fill_lock.
+Y-297: retry + advance after commit.
+Y-323: Decimal quantize.
+Y-353: DI.
+Y-358: fill_lock DI.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_DOWN
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..storage.sqlite_writer import SqliteWriter
     from ..storage.sealed import SealedStore
+    from ..storage.sqlite_writer import SqliteWriter
     from .rest_gateway import RestGateway
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class OrderManagerConfig:
-    max_retry: int = 3 # Y-285
-    leverage: int = 5 # position target
-    min_lot: float = 0.001 # Y-302
-    epsilon_divisor: float = 2.0 # min_lot/2
+    max_retry: int = 3
+    leverage: int = 5
+    min_lot: float = 0.001
+    epsilon_divisor: float = 2.0
 
 class OrderManager:
-    """
-    Order lifecycle and fill tracking.
-
-    Y-260: slippage = min(0.03, 0.10/leverage) decimal
-    Y-283: FLIP tespitinde emergency_close zorunlu
-    Y-289: ONE_WAY positionSide BOTH zorunlu
-    Y-291: dust false-positive CLOSED_DUST YASAK
-    Y-295: FLIP fill_lock deadlock fix lock disina cik
-    Y-297: retry + filled_by_order advance after commit
-    Y-302: dust <min_lot DUST_ACKNOWLEDGED
-    Y-315: sealed_orders TTL 300 dict value {sealed_at_local_ms, exchange_ts_ms, version}
-    Y-323: Decimal quantize str(Decimal) ROUND_DOWN
-    Y-339: lock hierarchy fill(2)->sqlite(3)->pacer(4)
-    Y-350: sqlite(3)->pacer(4)->flush(5)
-    Y-353: DI, no global
-    Y-358: asyncio.Lock (fill_lock DI)
-    """
-
     def __init__(
         self,
         config: OrderManagerConfig,
-        fill_lock: asyncio.Lock, # Y-339
+        fill_lock: asyncio.Lock,
         sqlite_writer: "SqliteWriter",
         sealed_store: "SealedStore",
         rest_gateway: "RestGateway",
@@ -82,13 +64,22 @@ class OrderManager:
         self._filled_by_order: dict[str, float] = {}
 
     async def on_startup(self) -> None:
-        """
-        Recover partial fills from DB.
-
-        Y-297: startup sync under fill_lock.
-        Y-323: no float, Decimal via str() for recovery math.
-        """
-        raise NotImplementedError("FAZ 4")
+        async with self._fill_lock:
+            try:
+                rows = await self._sqlite.fetch(
+                    "SELECT order_id, filled_qty FROM orders WHERE status='PARTIAL'"
+                )
+            except Exception as e:
+                logger.warning("on_startup fetch failed: %s", e)
+                return
+            for row in rows or []:
+                try:
+                    order_id = row[0]
+                    filled_qty = float(row[1])
+                    self._filled_by_order[order_id] = filled_qty
+                except Exception as e:
+                    logger.warning("on_startup row parse failed: %s", e)
+                    continue
 
     async def on_fill_event(
         self,
@@ -98,37 +89,68 @@ class OrderManager:
         exchange_ts_ms: int,
         position_id: str,
     ) -> None:
-        """
-        Handle fill event.
+        flip_detected = False
 
-        Y-283: if sign(fill) != sign(existing): FLIP -> emergency_close outside lock
-        Y-289: fills tracked with monotonic max(existing, new)
-        Y-291: dust <min_lot*0.1 -> DUST_ACKNOWLEDGED, no CLOSED_DUST false-positive
-        Y-295: FLIP emergency_close called OUTSIDE fill_lock (no deadlock)
-        Y-297: retry loop max 3 versioned update, advance filled_by_order ONLY after commit
-        Y-302: dust <min_lot -> DUST_ACKNOWLEDGED
-        Y-315: sealed check/update via sealed_store
-        Y-323: qty via Decimal quantize
-        Y-339/350: fill(2)->sqlite(3)->pacer(4)->flush(5) hierarchy
-        """
-        raise NotImplementedError("FAZ 4")
+        async with self._fill_lock:
+            existing = self._filled_by_order.get(order_id, 0.0)
+
+            if math.isclose(fill_qty, 0.0, abs_tol=1e-9):
+                return
+
+            if existing!= 0 and (existing > 0)!= (fill_qty > 0):
+                flip_detected = True
+            else:
+                new_fill = max(existing, fill_qty) if existing!= 0 else fill_qty
+                inc = new_fill - existing
+                if inc <= 0:
+                    return
+
+        if flip_detected:
+            try:
+                await self._rest.emergency_close(order_id)
+            except Exception as e:
+                logger.warning("emergency_close on FLIP failed: %s", e)
+            return
+
+        epsilon = self._config.min_lot / self._config.epsilon_divisor
+        if abs(fill_qty) < epsilon:
+            logger.warning(
+                "DUST_ACKNOWLEDGED order_id=%s qty=%f", order_id, fill_qty
+            )
+            return
+
+        for attempt in range(self._config.max_retry):
+            async with self._fill_lock:
+                existing = self._filled_by_order.get(order_id, 0.0)
+                new_fill = max(existing, fill_qty) if existing!= 0 else fill_qty
+                inc = new_fill - existing
+                if inc <= 0:
+                    return
+                try:
+                    current_version = await self._sqlite.get_version(position_id)
+                    await self._sqlite.update_position_versioned(
+                        position_id,
+                        fill_price,
+                        fill_price,
+                        fill_price,
+                        current_version + 1,
+                    )
+                    self._filled_by_order[order_id] = new_fill
+                    return
+                except Exception as e:
+                    logger.warning(
+                        "versioned update attempt %d failed: %s", attempt, e
+                    )
+                    continue
+
+        logger.warning("on_fill_event max retry exhausted order_id=%s", order_id)
 
     def leverage_adjusted_slippage(self) -> float:
-        """
-        Y-260: min(0.03, 0.10/leverage).
-
-        20x -> min(0.03, 0.005) = 0.005
-        5x  -> min(0.03, 0.02)  = 0.02
-        30x -> min(0.03, 0.0033)= 0.0033
-
-        Returns decimal, not bps.
-        """
-        raise NotImplementedError("FAZ 4")
+        return min(0.03, 0.10 / self._config.leverage)
 
     def quantize_qty(self, qty: float, precision: int) -> str:
-        """
-        Y-323: Decimal quantize str(Decimal) ROUND_DOWN.
+        from decimal import ROUND_DOWN, Decimal
 
-        str(Decimal) not Decimal(float) to avoid binary float artifact.
-        """
-        raise NotImplementedError("FAZ 4")
+        d = Decimal(str(qty))
+        q = Decimal("1").scaleb(-precision)
+        return str(d.quantize(q, rounding=ROUND_DOWN))
