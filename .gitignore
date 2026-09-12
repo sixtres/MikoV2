@@ -23,5 +23,15 @@
 *.tar.xz
 *.tar.zst
 ```
-env/
 _arsiv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.env
+env/
+venv/
