@@ -24,4 +24,4 @@
 *.tar.zst
 ```
 env/
-docs/_arsiv/
+_arsiv/
