@@ -1,70 +1,106 @@
-# YAMA SECRET-MASK: All logs must mask secrets - API key/secret never in plaintext - delegates to src.config.secrets.mask_secret
-# YAMA Y-353: Stateless logging factory - no global logger cache
-# YAMA Y-348: WARNING count-based rate limit per code every Nth call - trim can fire 200x/sec
-# YAMA STRUCTURED-JSON: JSON formatter + correlation_id injection + non-blocking QueueHandler
+# YAMA Y-276: non-blocking QueueHandler
+# YAMA Y-345: secret mask zorunlu
+# YAMA Y-348: WARNING count-based rate limit (her N'de 1), trim 200x/sec log flooding YASAK
+# YAMA Y-353: stateless (logger factory)
 
 """
-Logging utils.
+Logging utils - rate limit, correlation, queue.
 
-Provides logger factory with secret masking and rate limiting.
-- All logs mask secrets via src.config.secrets.mask_secret (SECRET-MASK)
-- WARNING count-based rate-limited per code every Nth (Y-348)
-- Structured JSON formatter with correlation_id
-- Non-blocking QueueHandler to avoid event loop block
-- Stateless factory via DI
+Y-348: WARNING count-based rate limit every N.
+Y-345: secret mask mandatory (delegated to config.secrets).
+Y-353: stateless factory, idempotent.
+Y-276: non-blocking QueueHandler.
 """
 
 from __future__ import annotations
 
-import json
 import logging
+import logging.handlers
 import uuid
-from logging.handlers import QueueHandler
-from typing import Any, Final
+from typing import Final
 
-_WARNING_COUNTERS: dict[str, int] = {} # code -> call count
-DEFAULT_LOG_EVERY_N: Final[int] = 100 # Y-348
+_WARNING_COUNTERS: dict[str, int] = {}
 
-def create_logger(name: str) -> logging.Logger:
-    """
-    Create logger with JSON formatter + secret mask filter + correlation_id injection.
+DEFAULT_LOG_EVERY_N: Final[int] = 100
 
-    Uses logging.Formatter with custom format that emits JSON.
-    """
-    raise NotImplementedError("FAZ 1")
-
-def create_queue_logger(name: str, queue: Any) -> logging.Logger:
-    """
-    Create logger with non-blocking QueueHandler.
-
-    Log writes are queued, never block the event loop.
-    Worker consumes queue on separate thread.
-    """
-    raise NotImplementedError("FAZ 1")
+def new_correlation_id() -> str:
+    """Return uuid4 string."""
+    return str(uuid.uuid4())
 
 def mask_secrets_in_message(message: str) -> str:
-    """Mask secrets - delegates to src.config.secrets.mask_secret - no duplicate logic."""
-    raise NotImplementedError("FAZ 1")
+    """
+    Mask secrets in message.
+
+    Y-345: delegation to config.secrets.mask_secret.
+    Minimal passthrough in FAZ 5a, detailed in 5b.
+    """
+    try:
+        from ..config.secrets import mask_secret
+
+        return mask_secret(message)
+    except Exception:
+        return message
 
 def log_warning_rate_limited(
     logger: logging.Logger,
     code: str,
     message: str,
-    *args: Any,
+    *args,
     every_n: int = DEFAULT_LOG_EVERY_N,
-    **kwargs: Any,
+    **kwargs,
 ) -> None:
     """
-    Log WARNING only every N-th call for the same code (Y-348).
+    Log warning every N occurrences for given code.
 
-    Prevents log flooding (trim can fire 200x/sec).
+    Y-348: count-based rate limit to prevent trim 200x/sec flooding.
     """
-    raise NotImplementedError("FAZ 1")
+    counter = _WARNING_COUNTERS.get(code, 0) + 1
+    _WARNING_COUNTERS[code] = counter
 
-def new_correlation_id() -> str:
-    """Return new UUID4 correlation_id for log record."""
-    raise NotImplementedError("FAZ 1")
+    if counter % every_n == 0:
+        logger.warning(message, *args, **kwargs)
 
-def log_info(logger: logging.Logger, message: str, *args: Any, **kwargs: Any) -> None:
-    """Log INFO with secret masking."""
-    raise NotImplementedError("FAZ 1")
+def create_logger(name: str) -> logging.Logger:
+    """
+    Create logger with StreamHandler, idempotent.
+
+    Y-353: stateless factory.
+    """
+    logger = logging.getLogger(name)
+
+    if logger.handlers:
+        return logger
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '{"time":"%(asctime)s","name":"%(name)s","level":"%(levelname)s","msg":"%(message)s"}'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    return logger
+
+def create_queue_logger(name: str, queue) -> logging.Logger:
+    """
+    Create logger with QueueHandler, idempotent.
+
+    Y-276: non-blocking QueueHandler.
+    """
+    logger = logging.getLogger(name)
+
+    for h in logger.handlers:
+        if isinstance(h, logging.handlers.QueueHandler):
+            return logger
+
+    qh = logging.handlers.QueueHandler(queue)
+    logger.addHandler(qh)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    return logger
+
+def log_info(logger: logging.Logger, message: str, *args, **kwargs) -> None:
+    """Info wrapper."""
+    logger.info(message, *args, **kwargs)

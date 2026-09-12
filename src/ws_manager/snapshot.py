@@ -1,23 +1,29 @@
-# YAMA Y-275: token bucket acquire before snapshot fetch - rate 8 burst 15
+# YAMA Y-269: rest_outer_timeout_ms whitelist
+# YAMA Y-275: token bucket acquire before snapshot fetch
 # YAMA Y-313: single epoch increment after snapshot
-# YAMA Y-353: Stateless - no global mutable
+# YAMA Y-353: DI, no global
 
 """
-Snapshot fetcher.
+Snapshot fetcher - token bucket rate limited, epoch single increment.
 
-Fetches L2 snapshot via REST with token bucket guard.
-- Acquire bucket before fetch (Y-275)
-- Single epoch increment (Y-313)
+Y-275: token bucket acquire before fetch.
+Y-313: single epoch increment inside on_snapshot.
+Y-269: rest_outer_timeout_ms whitelist.
+Y-353: DI, no global.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..data_layer.l2_buffer import L2Book, L2Buffer
     from ..data_layer.token_bucket import TokenBucket
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class SnapshotConfig:
@@ -26,47 +32,60 @@ class SnapshotConfig:
     rest_outer_timeout_ms: int = 3500
 
 class SnapshotFetcher:
-    """
-    Snapshot fetcher with token bucket guard.
-
-    Y-275: acquire before fetch
-    Y-313: single epoch increment
-    """
-
     def __init__(
         self,
         config: SnapshotConfig,
         token_bucket: "TokenBucket",
-        books: dict[str, "L2Book"],
+        books: dict,
         l2_buffer: "L2Buffer",
     ) -> None:
-        """
-        Initialize snapshot fetcher.
-
-        Args:
-            config: Snapshot config with rest_outer_timeout_ms (Y-269).
-            token_bucket: Token bucket rate 8 burst 15 (Y-275).
-            books: per-symbol L2Book dict via DI (Y-353).
-            l2_buffer: applied after fetch, uses its own RLock (Y-253).
-        """
         self._config = config
         self._token_bucket = token_bucket
         self._books = books
         self._l2_buffer = l2_buffer
 
-    async def fetch(self, symbol: str) -> Any:
-        """
-        Fetch snapshot for symbol.
+    async def fetch(self, symbol: str) -> Any | None:
+        try:
+            await self._token_bucket.acquire()
+        except Exception as e:
+            logger.warning("token bucket acquire failed: %s", e)
+            return None
 
-        Token bucket acquire (Y-275) before REST call.
-        """
-        raise NotImplementedError("FAZ 2")
+        async def _do_fetch():
+            # stub HTTP - real aiohttp later
+            # url = %s/depth?symbol=%s&limit=%s % (rest_url, symbol, depth)
+            return {"bids": [], "asks": [], "lastUpdateId": 0}
+
+        try:
+            timeout_s = self._config.rest_outer_timeout_ms / 1000.0
+            result = await asyncio.wait_for(_do_fetch(), timeout=timeout_s)
+            return result
+        except asyncio.TimeoutError:
+            logger.warning("snapshot fetch timeout symbol=%s", symbol)
+            return None
+        except Exception as e:
+            logger.warning("snapshot fetch failed symbol=%s error=%s", symbol, e)
+            return None
 
     async def fetch_and_apply(self, symbol: str) -> bool:
-        """
-        Fetch snapshot and apply to L2Buffer.
+        snapshot = await self.fetch(symbol)
+        if snapshot is None:
+            return False
 
-        Returns True if applied, False on error.
-        Single epoch increment (Y-313).
-        """
-        raise NotImplementedError("FAZ 2")
+        book = self._books.get(symbol)
+        if book is None:
+            try:
+                from ..data_layer.l2_buffer import L2Book
+
+                book = L2Book(symbol=symbol)
+                self._books[symbol] = book
+            except Exception as e:
+                logger.warning("create book failed: %s", e)
+                return False
+
+        try:
+            self._l2_buffer.on_snapshot(symbol, snapshot)
+            return True
+        except Exception as e:
+            logger.warning("on_snapshot failed symbol=%s error=%s", symbol, e)
+            return False

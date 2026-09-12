@@ -1,17 +1,15 @@
-# YAMA Y-275: SINGLE GLOBAL rate 8 burst 15 - no separate buckets, no bypass
+# YAMA Y-263: bypass YASAK FATAL
+# YAMA Y-275: SINGLE GLOBAL rate 8 burst 15, no separate buckets, no bypass
 # YAMA Y-326: await token_bucket.acquire() - async acquire
-# YAMA Y-358: asyncio.Lock - threading.Lock forbidden
-# YAMA Y-353: Stateless - instance via DI, no global mutable
-# YAMA Y-263: No bypass - single rate limit
+# YAMA Y-358: asyncio.Lock, threading.Lock YASAK
 
 """
 Token bucket rate limiter.
 
-SINGLE GLOBAL rate 8 burst 15 (Y-275).
-Async acquire (Y-326).
-- Refill via monotonic clock (wall clock forbidden Y-353)
-- asyncio.Lock (Y-358)
-- Stateless via DI
+Y-275: SINGLE GLOBAL rate 8 burst 15, no separate buckets, no bypass.
+Y-326: await token_bucket.acquire() async.
+Y-358: asyncio.Lock only.
+Y-263: bypass forbidden.
 """
 
 from __future__ import annotations
@@ -22,44 +20,51 @@ from typing import Final
 
 class TokenBucket:
     """
-    SINGLE GLOBAL token bucket rate limiter (Y-275).
+    Normal class (not dataclass).
 
-    rate 8 burst 15 - no separate buckets, no bypass (Y-263).
-    Async acquire (Y-326).
-    asyncio.Lock (Y-358) - threading.Lock YASAK.
-
-    Y-275: rate 8 burst 15
-    Y-326: await acquire()
-    Y-358: asyncio.Lock
-    Y-353: stateless - instance via DI
+    RATE=8, BURST=15 final.
     """
 
     RATE: Final[int] = 8
     BURST: Final[int] = 15
 
     def __init__(self) -> None:
-        self._tokens: float = float(self.BURST)
+        # Y-275: assert single global
+        assert self.RATE == 8 and self.BURST == 15, "FATAL: Y-275 rate 8 burst 15 only"
         self._rate: float = float(self.RATE)
         self._burst: float = float(self.BURST)
+        self._tokens: float = float(self.BURST)
         self._last_mono: float = time.monotonic()
         self._lock: asyncio.Lock = asyncio.Lock()
 
+    def _refill(self) -> None:
+        now = time.monotonic()
+        elapsed = now - self._last_mono
+        # cap at burst
+        self._tokens = min(self._burst, self._tokens + elapsed * self._rate)
+        self._last_mono = now
+
     async def acquire(self, tokens: float = 1.0) -> bool:
         """
-        Acquire tokens, wait if needed (Y-326).
+        Acquire tokens, wait if not enough.
 
-        Refill via monotonic clock. Sleep until enough tokens.
-        Formula: asyncio.sleep((1 - self._tokens) / self._rate)
-        Refill: tokens = min(burst, tokens + (now - last) * rate)
-        Assert rate == 8 and burst == 15 (Y-275).
-        Returns True when acquired.
+        Y-275: no bypass.
+        Y-326: async acquire.
+        Recursion forbidden, while loop mandatory.
         """
-        raise NotImplementedError("FAZ 2")
+        while True:
+            async with self._lock:
+                self._refill()
+                if self._tokens >= tokens:
+                    self._tokens -= tokens
+                    return True
+                needed = tokens - self._tokens
+                wait_time = needed / self._rate
 
-    def _refill(self) -> None:
-        """Refill tokens based on elapsed monotonic time."""
-        raise NotImplementedError("FAZ 2")
+            # sleep outside lock (Y-327 logic)
+            await asyncio.sleep(wait_time)
 
     def get_tokens(self) -> float:
-        """Return current token count (for tests)."""
-        raise NotImplementedError("FAZ 2")
+        """Return current tokens after refill."""
+        self._refill()
+        return self._tokens

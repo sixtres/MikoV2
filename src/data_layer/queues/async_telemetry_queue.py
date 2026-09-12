@@ -1,60 +1,58 @@
-# YAMA Y-276: telemetry DROP_OLDEST 1000, put_nowait DROP
+# YAMA Y-276: telemetry DROP_OLDEST 1000, put_nowait DROP (state DROP_NEVER)
 # YAMA Y-329: mp.Queue bridge for process-boundary telemetry
-# YAMA Y-353: Stateless - no global mutable, instance via DI
+# YAMA Y-353: DI, no global
 
 """
-Telemetry queue with DROP_OLDEST.
+AsyncTelemetryQueue - telemetry DROP_OLDEST 1000, fire-and-forget sync.
 
-Process-boundary queue: WS process -> REST gateway -> alerting.
-put_nowait is sync - fire-and-forget, never blocks event loop.
+Y-276: telemetry DROP_OLDEST 1000, state DROP_NEVER ayri.
+Y-329: mp.Queue bridge for process-boundary telemetry.
+Y-353: DI, no global.
 """
 
 from __future__ import annotations
 
+import logging
 import multiprocessing as mp
-from typing import Any
+import queue
+
+logger = logging.getLogger(__name__)
 
 class AsyncTelemetryQueue:
-    """
-    Telemetry queue with DROP_OLDEST (Y-276).
-
-    Process-boundary queue: WS process -> REST gateway -> alerting.
-    put_nowait is sync - fire-and-forget, never blocks event loop.
-    DROP_OLDEST on overflow, unlike state_queue (DROP_NEVER).
-
-    Y-276: telemetry DROP_OLDEST 1000, put_nowait DROP
-    Y-329: mp.Queue bridge for process-boundary telemetry
-    Y-353: instance via DI
-    """
-
     def __init__(self, maxsize: int = 1000) -> None:
-        self._maxsize: int = maxsize
+        self._maxsize = maxsize
         self._q: mp.Queue = mp.Queue(maxsize=maxsize)
         self._dropped: int = 0
-
-    def put_nowait(self, item: Any) -> None:
-        """
-        Put item, DROP_OLDEST if full (Y-276).
-
-        Sync fire-and-forget. On QueueFull:
-          1. get_nowait() to evict oldest
-          2. put_nowait() retry
-          3. If still full, drop silently + increment counter
-        """
-        raise NotImplementedError("FAZ 3")
-
-    def get_nowait(self) -> Any:
-        """Non-blocking get from mp.Queue. Returns None if empty."""
-        raise NotImplementedError("FAZ 3")
-
-    def qsize(self) -> int:
-        """Return current queue size."""
-        raise NotImplementedError("FAZ 3")
-
-    def dropped_count(self) -> int:
-        """Return count of dropped items (Y-276 metric)."""
-        raise NotImplementedError("FAZ 3")
 
     @property
     def maxsize(self) -> int:
         return self._maxsize
+
+    def put_nowait(self, item) -> None:
+        try:
+            self._q.put_nowait(item)
+        except (queue.Full, Exception):
+            try:
+                self._q.get_nowait()
+            except (queue.Empty, Exception):
+                pass
+            try:
+                self._q.put_nowait(item)
+            except (queue.Full, Exception):
+                self._dropped += 1
+                logger.warning("telemetry drop oldest failed, dropped=%d", self._dropped)
+
+    def get_nowait(self):
+        try:
+            return self._q.get_nowait()
+        except (queue.Empty, Exception):
+            return None
+
+    def qsize(self) -> int:
+        try:
+            return self._q.qsize()
+        except Exception:
+            return 0
+
+    def dropped_count(self) -> int:
+        return self._dropped

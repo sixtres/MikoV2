@@ -1,56 +1,120 @@
-# YAMA Y-353: Stateless utils - no global mutable state, pure functions
-# YAMA Y-323: ROUND_DOWN required - HALF_UP forbidden for price/qty quantize
-# YAMA DECIMAL-QUANTIZE: Decimal quantize with str(Decimal) ROUND_DOWN price_precision qty_precision separate - float FATAL
-# YAMA Y-260: Slippage leverage adjusted uses Decimal min(0.03, 0.10/lev)
+# YAMA Y-260: slippage min(0.03, 0.10/leverage)
+# YAMA Y-271: Decimal f-string YASAK, quantize str(Decimal.quantize)
+# YAMA Y-323: ROUND_DOWN required, HALF_UP YASAK, str(Decimal) not float
 
 """
-Decimal utils.
+Decimal utils - safe quantization and validation.
 
-All price/qty operations must use Decimal quantize with str(Decimal) and ROUND_DOWN (Y-323).
-price_precision and qty_precision separate.
-Float for price/qty is FATAL.
+Y-323: ROUND_DOWN only, HALF_UP forbidden, Decimal(str()) not float().
+Y-271: Decimal f-string forbidden.
+Y-260: slippage min(0.03, 0.10/leverage)
 """
 
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_DOWN
+import math
+from decimal import ROUND_DOWN, Decimal
+from typing import Union
 
-def quantize_price(price: Decimal | str | float, precision: Decimal) -> Decimal:
+DecimalLike = Union[Decimal, str, int, float]
+PrecisionLike = Union[Decimal, int, str]
+
+def _resolve_precision(precision: PrecisionLike) -> Decimal:
+    """Resolve precision to Decimal quantizer."""
+    if isinstance(precision, Decimal):
+        return precision
+    if isinstance(precision, int):
+        # scaleb avoids f-string, handles int -> 1e-precision
+        return Decimal("1").scaleb(-precision)
+    # str or other -> Decimal via str()
+    return Decimal(str(precision))
+
+def to_decimal(value: DecimalLike) -> Decimal:
     """
-    Quantize price with str(Decimal) using ROUND_DOWN (Y-323).
+    Convert value to Decimal via str() path.
 
-    Args:
-        price: Decimal or str, float is converted via str() but WARNING
-        precision: e.g. Decimal("0.01")
-
-    Returns:
-        Quantized Decimal with ROUND_DOWN
+    Y-323: str(Decimal) required, direct float() forbidden.
+    NaN/Inf -> FATAL ValueError.
     """
-    raise NotImplementedError("FAZ 1")
+    if isinstance(value, Decimal):
+        if value.is_nan() or value.is_infinite():
+            raise ValueError(f"FATAL: NaN/Inf Decimal not allowed: {value!r}")
+        return value
 
-def quantize_qty(qty: Decimal | str | float, precision: Decimal) -> Decimal:
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError(f"FATAL: NaN/Inf float not allowed: {value!r}")
+        return Decimal(str(value))
+
+    if isinstance(value, int):
+        return Decimal(str(value))
+
+    if isinstance(value, str):
+        d = Decimal(value)
+        if d.is_nan() or d.is_infinite():
+            raise ValueError(f"FATAL: NaN/Inf str not allowed: {value!r}")
+        return d
+
+    # fallback for other types (e.g. numpy) -> str path
+    s = str(value)
+    d = Decimal(s)
+    if d.is_nan() or d.is_infinite():
+        raise ValueError(f"FATAL: NaN/Inf value not allowed: {value!r}")
+    return d
+
+def quantize_price(price: DecimalLike, precision: PrecisionLike) -> Decimal:
     """
-    Quantize qty with str(Decimal) using ROUND_DOWN (Y-323) separate from price precision.
+    Quantize price with ROUND_DOWN.
+
+    Y-323: ROUND_DOWN required, HALF_UP forbidden.
+    Y-271: Decimal f-string forbidden, use quantize directly.
     """
-    raise NotImplementedError("FAZ 1")
+    d = to_decimal(price)
+    q = _resolve_precision(precision)
+    return d.quantize(q, rounding=ROUND_DOWN)
 
-def to_decimal(value: str | int | float | Decimal) -> Decimal:
-    """Convert to Decimal via str(value) to avoid float FATAL."""
-    raise NotImplementedError("FAZ 1")
-
-def is_valid_price_precision(price: Decimal, tick_size: Decimal) -> bool:
-    """Check price aligns with tick_size - FATAL if not."""
-    raise NotImplementedError("FAZ 1")
-
-def is_valid_qty_precision(qty: Decimal, step_size: Decimal) -> bool:
-    """Check qty aligns with step_size."""
-    raise NotImplementedError("FAZ 1")
-
-def compute_slippage_pct(leverage: int) -> Decimal:
+def quantize_qty(qty: DecimalLike, precision: PrecisionLike) -> Decimal:
     """
-    Compute slippage pct leverage adjusted (Y-260).
+    Quantize qty with ROUND_DOWN.
 
-    Formula: min(Decimal('0.03'), Decimal('0.10') / leverage)
-    Example: 20x = 0.5%
+    Y-323: ROUND_DOWN required.
     """
-    raise NotImplementedError("FAZ 1")
+    d = to_decimal(qty)
+    q = _resolve_precision(precision)
+    return d.quantize(q, rounding=ROUND_DOWN)
+
+def is_valid_price_precision(price: DecimalLike, tick_size: DecimalLike) -> bool:
+    """
+    Check price % tick_size == 0.
+
+    Y-323: Decimal mod check via Decimal.
+    """
+    p = to_decimal(price)
+    t = to_decimal(tick_size)
+    if t == Decimal("0"):
+        return False
+    return (p % t) == Decimal("0")
+
+def is_valid_qty_precision(qty: DecimalLike, step_size: DecimalLike) -> bool:
+    """
+    Check qty % step_size == 0.
+    """
+    q = to_decimal(qty)
+    s = to_decimal(step_size)
+    if s == Decimal("0"):
+        return False
+    return (q % s) == Decimal("0")
+
+def compute_slippage_pct(leverage: int | float | Decimal) -> Decimal:
+    """
+    Y-260: min(0.03, 0.10/leverage).
+
+    leverage via str() path, no direct float().
+    """
+    lev = to_decimal(leverage)
+    if lev == Decimal("0"):
+        raise ValueError("FATAL: leverage 0 not allowed")
+    # Decimal('0.10') / lev via str path already handled
+    ratio = Decimal("0.10") / lev
+    ceiling = Decimal("0.03")
+    return ceiling if ceiling < ratio else ratio

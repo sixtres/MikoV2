@@ -1,34 +1,38 @@
-# YAMA Y-345: CRITICAL_ALERT + FVG_EXPIRED_HARD_DEADLINE bypass telemetry_queue; emit_event sync log + emit_event_async alert
-# YAMA Y-353: Stateless - telemetry_queue passed as DI parameter, no global
+# YAMA Y-276: telemetry_queue put_nowait DROP (sadece telemetry)
+# YAMA Y-345: CRITICAL_ALERT + FVG_EXPIRED_HARD_DEADLINE bypass telemetry_queue; sync=log only, async=alert
+# YAMA Y-353: stateless, DI parameters (no global)
 
 """
-Events utils.
+Event emitter - critical bypass.
 
-Event emission with CRITICAL bypass (Y-345).
-- CRITICAL_ALERT and FVG_EXPIRED_HARD_DEADLINE: logger.warning + alerting_agent.send_direct
-- All other events: telemetry_queue.put_nowait
-- Async variant awaits alert delivery, sync variant is fire-and-forget log
+Y-345: CRITICAL_ALERT + FVG_EXPIRED_HARD_DEADLINE bypass telemetry_queue.
+Y-276: telemetry_queue put_nowait only.
+Y-353: stateless utils, DI via parameters.
 """
 
 from __future__ import annotations
 
 from typing import Any, Final
 
-CRITICAL_EVENTS: Final[tuple[str, ...]] = (
-    "CRITICAL_ALERT",
-    "FVG_EXPIRED_HARD_DEADLINE",
-)
+CRITICAL_EVENTS: Final[tuple[str,...]] = ("CRITICAL_ALERT", "FVG_EXPIRED_HARD_DEADLINE")
 
 def emit_event(
-    event_type: str, payload: dict, telemetry_queue: Any, logger: Any
+    event_type: str,
+    payload: dict,
+    telemetry_queue: Any,
+    logger: Any,
 ) -> None:
     """
-    Sync log emission (Y-345).
+    Sync emit.
 
-    CRITICAL_ALERT + FVG_EXPIRED_HARD_DEADLINE -> logger.warning only
-    Others -> telemetry_queue.put_nowait((event_type, payload))
+    - critical -> logger.warning, bypass telemetry (Y-345)
+    - normal -> telemetry_queue.put_nowait((event_type, payload)) (Y-276)
     """
-    raise NotImplementedError("FAZ 1")
+    if event_type in CRITICAL_EVENTS:
+        logger.warning(event_type, payload)
+        return
+
+    telemetry_queue.put_nowait((event_type, payload))
 
 async def emit_event_async(
     event_type: str,
@@ -38,10 +42,14 @@ async def emit_event_async(
     alerting_agent: Any,
 ) -> None:
     """
-    Async emission with alert (Y-345).
+    Async emit.
 
-    CRITICAL_ALERT + FVG_EXPIRED_HARD_DEADLINE -> logger.warning
-    + await alerting_agent.send_direct
-    Others -> telemetry_queue.put_nowait
+    - critical -> logger.warning + await alerting_agent.send_direct (Y-345)
+    - normal -> telemetry_queue.put_nowait((event_type, payload))
     """
-    raise NotImplementedError("FAZ 1")
+    if event_type in CRITICAL_EVENTS:
+        logger.warning(event_type, payload)
+        await alerting_agent.send_direct(event_type, payload)
+        return
+
+    telemetry_queue.put_nowait((event_type, payload))
