@@ -1,4 +1,4 @@
-# MikoV2 ROADMAP REV6 — FAZ 5a KAPANDI
+# MikoV2 ROADMAP REV6 — FAZ 5 KAPANDI
 
 ## Faz Durumu
 
@@ -8,8 +8,7 @@
 - FAZ 3 — QUEUE, RATE LIMIT & PACER .. ✅ 6 dosya
 - FAZ 4 — EXECUTION, EMERGENCY, 
          STORAGE & RISK ............... ✅ 15 dosya
-- FAZ 5a — IMPLEMENTATION ............ ✅ 397 test PASS
-- FAZ 5b — BUG FIX (kavramsal) ....... ⏳ sırada (opsiyonel)
+- FAZ 5 — IMPLEMENTATION ............ ✅ 397 test PASS
 - FAZ 6 — INTEGRATION & LOCK ......... ⏳ sırada
 - FAZ 7 — MONKEY / FUZZ / CHAOS ...... ⏳ bekliyor
 - FAZ 8 — SHADOW TEST ................ ⏳ bekliyor
@@ -42,7 +41,7 @@ tests/unit/        (24+ dosya) ✓
 
 ## Kümülatif Test
 
-397 test PASS. Detay: FAZ-5A-KAPANIS.md
+397 test PASS. Detay: FAZ-5-KAPANIS.md
 
 ## Sıradaki FAZ 6 (Integration)
 

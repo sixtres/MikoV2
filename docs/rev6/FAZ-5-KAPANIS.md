@@ -1,4 +1,4 @@
-# FAZ 5a KAPANIŞ RAPORU — Implementation
+# FAZ 5 KAPANIŞ RAPORU — Implementation
 
 Tarih: 2026-09-13
 Test sayısı: 397 PASS
@@ -69,7 +69,7 @@ pytest tests/unit/ -v
 pip install pandas pyarrow pytest pytest-asyncio
 (requirements.txt güncel)
 
-## Bilinen Sorunlar ve FAZ 5b'ye Taşınanlar
+## Bilinen Sorunlar (FAZ 6'da gözden geçirilecek)
 
 1. pacer.pop aging testleri: unit test geçti, runtime integration gerekli
 2. whale_radar._band_key: kullanıcı elle düzeltti (int(price/(tick_size*5)))

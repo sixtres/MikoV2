@@ -1,0 +1,93 @@
+BAĞLAM: MikoV2 Projesi — Faz 6 Başlangıç Bağlamı
+Tarih: 2026-09-13
+PO: Eser Göbekli
+
+## Proje Özeti
+
+MikoV2 — Kripto vadeli işlem bot. Python 3.10 asyncio + mp.Queue + 
+Numba + SQLite WAL + Parquet + aiohttp.
+
+Hedef: Gerçek runtime'da çalışan, 116 YAMA'ya uyumlu, dashboard 
+dinamik, balina yakalama ve otomatik işlem yapan sistem.
+
+## Kaynak Dökümanlar (GitHub: sixtres/MikoV2)
+
+- MikoV2-AnaYasa-REV5.md (116 YAMA, 245 bulgu)
+- MikoV2-Proje-Tum-Moduller-REV5.md (tüm modül pseudo)
+- DURUM-REV6.md (FAZ 5 kapandı)
+- ROADMAP-REV6.md (faz haritası)
+- FAZ-5-KAPANIS.md (397 test detay)
+- BAĞLAM.txt (bu dosya)
+
+## Faz Durumu
+
+✅ FAZ 0 — BOOTSTRAP & AUDIT (116 YAMA)
+✅ FAZ 1 — SKELETON & DI (12 dosya)
+✅ FAZ 2 — DATA LAYER & WS SKELETON (9 dosya)
+✅ FAZ 3 — QUEUE & PACER SKELETON (6 dosya)
+✅ FAZ 4 — EXECUTION & EMERGENCY SKELETON (15 dosya)
+✅ FAZ 5 — IMPLEMENTATION + UNIT TESTS (397 PASS)
+⏳ FAZ 6 — INTEGRATION & LOCK HIERARCHY (sırada)
+⏳ FAZ 7 — MONKEY / FUZZ / CHAOS
+⏳ FAZ 8 — SHADOW TEST
+⏳ FAZ 9 — DASHBOARD FRONTEND + E2E
+
+## Python Sürümü
+
+Hedef: Python 3.10 (kullanıcı environment)
+3.11+ syntax YASAK: except*, TaskGroup, asyncio.coroutine
+
+## Çalışma Disiplini (Yeni sohbette uyulacak)
+
+- "from.." ve "from." YASAK, "from .." ve "from ." ZORUNLU
+- f-string log YASAK, "%s"/"%d" placeholder
+- Global mutable state YASAK, DI zorunlu (Y-353)
+- Test yazmadan önce syntax kontrol
+- Her kod bloğu sonrası pytest çalıştır
+- Import bloğunda TYPE_CHECKING varsa mutlaka grep et
+
+## FAZ 6 Görev Tanımı
+
+Amaç: Modüller arası entegrasyonu test et, kavramsal hataları ortaya çıkar.
+
+Test dosyaları:
+1. tests/integration/test_lock_hierarchy.py
+   - Lock sırası ihlali deadlock tespiti
+   - buffer>fill>sqlite>pacer>flush>telemetry sırası
+   - emergency sqlite(3)->pacer(4)->flush(5) doğru sıra
+2. tests/integration/test_ws_seq_epoch.py
+   - Multi-symbol seq_epoch yönetimi
+   - Reconnect epoch++ sonrası eski mesaj drop
+   - pre_sync_queue replay (snapshot gap)
+3. tests/integration/test_snapshot_gap.py
+   - Snapshot geldiğinde epoch reset + queue clear
+   - Gap sonrası resync
+4. tests/integration/test_emergency_e2e.py
+   - FLIP tespiti -> emergency_close -> pacer bypass -> sealed
+   - Single-flight idempotency
+5. tests/integration/test_para_mock_e2e.py
+   - Fill event -> position update -> TP/SL shift -> BE trail
+   - Emergency close
+
+## FAZ 6 DoD
+
+- Her test dosyası en az 5 test PASS
+- Multi-modül akışı kanıtlanmış
+- Bilinen kavramsal hatalar test ile yakalanmış
+- pytest tests/integration/ -v PASS
+
+## Sonraki Fazlar (kısa)
+
+- FAZ 7: Chaos (queue full, 429 storm, ping timeout, deadlock)
+- FAZ 8: Shadow (Binance testnet, 24h paper trading)
+- FAZ 9: Dashboard frontend (HTML/JS/SSE endpoint, 4 panel)
+
+## Deployment (FAZ 8-9 sonrası)
+
+Docker + docker-compose, MIKO_ENV=TEST|PROD, stop_grace 35s
+
+## KURAL
+
+- Blind kabul YASAK, her satır sorgulanabilir
+- FROZEN YOK, gerekirse ROLLBACK
+- Yeni YAMA açık (369+)
