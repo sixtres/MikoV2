@@ -61,7 +61,10 @@ async def test_shadow_snapshot_then_stream():
 
 
 @pytest.mark.asyncio
-async def test_shadow_gap_detection_and_recovery():
+async def test_shadow_stale_drop_and_monotonic_accept():
+    """
+    MEXC mode: jump is not gap (throttle); only regression is stale.
+    """
     symbol = "BTC_USDT"
     books = {}
     buffer = L2Buffer(books)
@@ -71,16 +74,15 @@ async def test_shadow_gap_detection_and_recovery():
     await seq.set_epoch(symbol, 1)
     await seq.set_last_u(symbol, 500, 0)
 
-    # Jump from 500 to 505 -> gap
+    # jump from 500 to 505 -> accepted (MEXC throttles versions)
     res = await seq.validate(symbol, 1, first_u=505)
-    assert res.is_gap is True
-    assert res.needs_resync is True
+    assert res.is_valid is True
+    assert res.needs_resync is False
 
-    # Recover by replaying commits 501..505 (simulated)
-    await seq.set_last_u(symbol, 500, 0)
-    for v in range(501, 506):
-        r = await seq.validate(symbol, 1, first_u=v)
-        assert r.is_valid is True
+    # regression 504 -> 503 stale, dropped
+    res2 = await seq.validate(symbol, 1, first_u=503)
+    assert res2.is_valid is False
+    assert res2.needs_resync is False
 
 
 @pytest.mark.asyncio

@@ -152,6 +152,20 @@ class EmergencyCloser:
                     if result == "DUST_ACKNOWLEDGED":
                         break
                     await asyncio.sleep(0.2)
+
+                # REV7: DB close_position (dashboard + backtest icin)
+                if result in ("CLOSED", "FORCE_LIQUIDATED_BY_SYSTEM"):
+                    try:
+                        await self._sqlite.close_position(
+                            position_id=symbol,
+                            close_reason=result,
+                            realized_pnl=0.0,
+                            fee_total=0.0,
+                            r_multiple=None,
+                        )
+                    except Exception as e:
+                        logger.warning("close_position DB failed: %s", e)
+
                 return result
             finally:
                 try:

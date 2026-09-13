@@ -2,17 +2,22 @@
 # YAMA Y-345: SSE auth token
 # YAMA Y-353: DI, no global
 # YAMA Y-358: asyncio.Lock DI
+# REV7: DB-backed routes
 
 """
-Dashboard routes - SSE stream, health, funding status.
+Dashboard routes - business logic. aiohttp handlers call these.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
-from typing import AsyncIterator
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..storage.sqlite_writer import SqliteWriter
 
 logger = logging.getLogger(__name__)
 
@@ -24,67 +29,290 @@ class RoutesConfig:
     sse_throttle_emergency_ms: int = 100
     replay_buffer_size: int = 100
     alive_threshold_pct: float = 0.80
-
-
-@dataclass(slots=True)
-class SseEvent:
-    event_id: int
-    data: str
-    event_type: str = "message"
+    equity_window_ms: int = 24 * 3600 * 1000
+    equity_max_points: int = 2000
 
 
 class DashboardRoutes:
-    def __init__(self, config: RoutesConfig, sqlite_lock: asyncio.Lock) -> None:
+    def __init__(
+        self,
+        config: RoutesConfig,
+        sqlite_writer: "SqliteWriter",
+        sqlite_lock: asyncio.Lock,
+        telemetry_queue: Any | None = None,
+        started_mono: float | None = None,
+    ) -> None:
         self._config = config
+        self._sqlite = sqlite_writer
         self._lock = sqlite_lock
-        self._event_buffer: list[SseEvent] = []
+        self._telemetry_queue = telemetry_queue
+        self._started_mono = started_mono or time.monotonic()
+        self._event_buffer: list[dict] = []
         self._event_id_counter: int = 0
 
-    def _validate_token(self, token: str) -> bool:
+    # --------------------------------------------------------------- auth
+
+    def validate_token(self, token: str) -> bool:
         expected = self._config.auth_token
         if not expected:
             return True
         return token == expected
 
-    def _replay_events(self, last_event_id: int) -> list[SseEvent]:
-        limit = self._config.replay_buffer_size
-        out: list[SseEvent] = []
-        for ev in self._event_buffer:
-            if ev.event_id > last_event_id:
-                out.append(ev)
-                if len(out) >= limit:
-                    break
-        return out
+    # --------------------------------------------------------------- health
 
-    async def sse_stream(
-        self, last_event_id: int | None, auth_token: str
-    ) -> AsyncIterator[SseEvent]:
-        if not self._validate_token(auth_token):
-            logger.warning("sse_stream auth failed")
+    async def health(self) -> tuple[int, dict]:
+        try:
+            async with self._lock:
+                rows = await self._sqlite.fetch(
+                    "SELECT COUNT(*) FROM positions WHERE status IN ('open','partial')"
+                )
+            open_count = int(rows[0][0]) if rows else 0
+            uptime_s = time.monotonic() - self._started_mono
+            body = {
+                "status": "ok",
+                "open_positions": open_count,
+                "uptime_s": round(uptime_s, 1),
+                "alive_pct": 1.0,
+            }
+            return 200, body
+        except Exception as e:
+            logger.warning("health failed: %s", e)
+            return 503, {"status": "error", "reason": str(e)}
+
+    # --------------------------------------------------------------- positions
+
+    async def positions(self, limit: int = 100) -> dict:
+        try:
+            async with self._lock:
+                open_rows = await self._sqlite.list_open_positions()
+                closed_rows = await self._sqlite.list_closed_positions(limit=limit)
+
+            open_list = [self._row_to_position(r, is_open=True) for r in open_rows or []]
+            closed_list = [
+                self._row_to_position(r, is_open=False) for r in closed_rows or []
+            ]
+            return {
+                "open": open_list,
+                "closed": closed_list,
+                "count_open": len(open_list),
+                "count_closed": len(closed_list),
+            }
+        except Exception as e:
+            logger.warning("positions failed: %s", e)
+            return {"open": [], "closed": [], "error": str(e)}
+
+    def _row_to_position(self, row: tuple, is_open: bool) -> dict:
+        if is_open:
+            return {
+                "position_id": row[0],
+                "symbol": row[1],
+                "side": row[2],
+                "opened_at_ms": row[3],
+                "avg": row[4],
+                "qty_open": row[5],
+                "qty_remaining": row[6],
+                "current_tp_shifted": row[7],
+                "current_sl_shifted": row[8],
+                "be_active": bool(row[9]),
+                "trailing_active": bool(row[10]),
+                "whale_trust_score": row[11],
+                "universe_status": row[12],
+                "version": row[13],
+                "emergency_pending": bool(row[14]),
+            }
+        return {
+            "position_id": row[0],
+            "symbol": row[1],
+            "side": row[2],
+            "opened_at_ms": row[3],
+            "closed_at_ms": row[4],
+            "close_reason": row[5],
+            "avg": row[6],
+            "realized_pnl": row[7],
+            "fee_total": row[8],
+            "r_multiple": row[9],
+        }
+
+    # --------------------------------------------------------------- whales
+
+    async def whales(self, limit: int = 50) -> dict:
+        try:
+            async with self._lock:
+                rows = await self._sqlite.list_recent_whales(limit=limit)
+            items = [
+                {
+                    "id": r[0],
+                    "symbol": r[1],
+                    "band_key": r[2],
+                    "price": r[3],
+                    "oi_delta_usd": r[4],
+                    "fill_ratio": r[5],
+                    "order_lifetime_ms": r[6],
+                    "is_real": bool(r[7]),
+                    "is_spoof": bool(r[8]),
+                    "trust_score": r[9],
+                    "exchange_ts_ms": r[10],
+                    "created_at_ms": r[11],
+                }
+                for r in rows or []
+            ]
+            return {"whales": items, "count": len(items)}
+        except Exception as e:
+            logger.warning("whales failed: %s", e)
+            return {"whales": [], "error": str(e)}
+
+    # --------------------------------------------------------------- equity
+
+    async def equity(self) -> dict:
+        try:
+            since_ms = int(time.time() * 1000) - self._config.equity_window_ms
+            async with self._lock:
+                rows = await self._sqlite.list_equity_snapshots(
+                    since_ms=since_ms, limit=self._config.equity_max_points
+                )
+            points = [
+                {
+                    "ts_ms": r[0],
+                    "balance": r[1],
+                    "equity": r[2],
+                    "unrealized_pnl": r[3],
+                    "realized_today": r[4],
+                    "drawdown_pct": r[5],
+                    "open_positions": r[6],
+                }
+                for r in rows or []
+            ]
+            latest = points[-1] if points else None
+            return {"points": points, "latest": latest, "count": len(points)}
+        except Exception as e:
+            logger.warning("equity failed: %s", e)
+            return {"points": [], "latest": None, "error": str(e)}
+
+    # --------------------------------------------------------------- pnl
+
+    async def pnl(self) -> dict:
+        try:
+            from datetime import datetime, timezone
+
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            async with self._lock:
+                today_row = await self._sqlite.get_daily_stats(today)
+                closed_rows = await self._sqlite.list_closed_positions(limit=500)
+
+            wins = 0
+            losses = 0
+            total_pnl = 0.0
+            total_fees = 0.0
+            r_sum = 0.0
+            r_count = 0
+            for r in closed_rows or []:
+                pnl_val = float(r[7] or 0.0)
+                fee_val = float(r[8] or 0.0)
+                r_val = r[9]
+                total_pnl += pnl_val
+                total_fees += fee_val
+                if pnl_val > 0:
+                    wins += 1
+                elif pnl_val < 0:
+                    losses += 1
+                if r_val is not None:
+                    try:
+                        r_sum += float(r_val)
+                        r_count += 1
+                    except (TypeError, ValueError):
+                        pass
+
+            total = wins + losses
+            win_rate = (wins / total) if total > 0 else 0.0
+            avg_r = (r_sum / r_count) if r_count > 0 else 0.0
+
+            today_dict = None
+            if today_row is not None:
+                today_dict = {
+                    "date_utc": today_row[0],
+                    "start_equity": today_row[1],
+                    "end_equity": today_row[2],
+                    "realized_pnl": today_row[3],
+                    "fees": today_row[4],
+                    "trades_count": today_row[5],
+                    "win_count": today_row[6],
+                    "loss_count": today_row[7],
+                }
+
+            return {
+                "today": today_dict,
+                "all_time": {
+                    "total_pnl": total_pnl,
+                    "total_fees": total_fees,
+                    "wins": wins,
+                    "losses": losses,
+                    "trades": total,
+                    "win_rate": round(win_rate, 4),
+                    "avg_r_multiple": round(avg_r, 3),
+                },
+            }
+        except Exception as e:
+            logger.warning("pnl failed: %s", e)
+            return {"today": None, "all_time": {}, "error": str(e)}
+
+    # --------------------------------------------------------------- metrics
+
+    async def metrics(self) -> dict:
+        try:
+            uptime_s = time.monotonic() - self._started_mono
+            async with self._lock:
+                rows = await self._sqlite.fetch(
+                    "SELECT COUNT(*) FROM positions"
+                )
+            total_pos = int(rows[0][0]) if rows else 0
+            return {
+                "uptime_s": round(uptime_s, 1),
+                "total_positions": total_pos,
+                "tick_rate": 0,
+                "gaps": 0,
+                "resyncs": 0,
+                "latency_ms": 0,
+            }
+        except Exception as e:
+            logger.warning("metrics failed: %s", e)
+            return {"error": str(e)}
+
+    # --------------------------------------------------------------- sse
+
+    async def sse_stream(self, last_event_id: int | None, auth_token: str):
+        """Async generator yielding SSE dicts."""
+        if not self.validate_token(auth_token):
             raise PermissionError("invalid token")
 
         if last_event_id is not None:
             for ev in self._replay_events(last_event_id):
                 yield ev
 
+        # Emit a keepalive comment event every throttle interval
+        while True:
+            await asyncio.sleep(self._config.sse_throttle_normal_ms / 1000.0)
+            self._event_id_counter += 1
+            yield {
+                "id": self._event_id_counter,
+                "event": "keepalive",
+                "data": '{"ts": %d}' % int(time.time() * 1000),
+            }
+
+    def push_event(self, event_type: str, data: dict) -> None:
+        """Called by supervisor when telemetry event arrives."""
         self._event_id_counter += 1
-        dummy = SseEvent(
-            event_id=self._event_id_counter,
-            data='{"status":"ok"}',
-            event_type="message",
+        self._event_buffer.append(
+            {"id": self._event_id_counter, "event": event_type, "data": data}
         )
-        yield dummy
+        if len(self._event_buffer) > self._config.replay_buffer_size:
+            self._event_buffer = self._event_buffer[-self._config.replay_buffer_size:]
 
-    async def health_check(self) -> tuple[int, dict]:
-        try:
-            alive = 1.0
-            if alive < self._config.alive_threshold_pct:
-                return 503, {"status": "unhealthy", "alive_pct": alive}
-            return 200, {"status": "ok", "alive_pct": alive}
-        except Exception as e:
-            logger.warning("health_check failed: %s", e)
-            return 503, {"status": "error"}
-
-    async def funding_status(self) -> dict:
-        times = (0, 8, 16)
-        return {"times": list(times), "next": 8}
+    def _replay_events(self, last_event_id: int) -> list[dict]:
+        limit = self._config.replay_buffer_size
+        out: list[dict] = []
+        for ev in self._event_buffer:
+            if ev["id"] > last_event_id:
+                out.append(ev)
+                if len(out) >= limit:
+                    break
+        return out

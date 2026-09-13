@@ -1,6 +1,9 @@
 # YAMA Y-276, Y-329, Y-353
 
 import inspect
+import time
+
+import pytest
 
 from src.data_layer.queues.async_telemetry_queue import AsyncTelemetryQueue
 
@@ -56,10 +59,14 @@ def test_put_nowait_dropped_counter():
         q.close()
 
 
-def test_get_nowait_returns_item():
+@pytest.mark.asyncio
+async def test_get_nowait_returns_item():
     q = _make()
     try:
         q.put_nowait("x")
+        # mp.Queue feeder thread is async; give it a moment
+        import time
+        time.sleep(0.05)
         item = q.get_nowait()
         assert item == "x"
     finally:

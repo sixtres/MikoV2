@@ -16,6 +16,7 @@ def _make_closer(rest_result=None, rest_exc=None):
     rest._direct_market_post = AsyncMock(return_value={"status": "forced"})
     sqlite = MagicMock()
     sqlite.execute_wal = AsyncMock(return_value=None)
+    sqlite.close_position = AsyncMock(return_value=None)  # ← EKLE
     sealed = MagicMock()
     flush = MagicMock()
     flush.suspend = MagicMock()
@@ -121,3 +122,37 @@ async def test_persist_called_first():
 
 def test_no_global_state():
     assert not hasattr(EmergencyCloser, "_tasks")
+
+@pytest.mark.asyncio
+async def test_close_writes_db_on_success():
+    closer, _, _, _ = _make_closer(rest_result={"status": "ok", "slippage": 0.0})
+    result = await closer.emergency_close_with_retry("BTC_USDT")
+    assert result == "CLOSED"
+    closer._sqlite.close_position.assert_awaited()
+    kwargs = closer._sqlite.close_position.await_args.kwargs
+    assert kwargs["position_id"] == "BTC_USDT"
+    assert kwargs["close_reason"] == "CLOSED"
+
+
+@pytest.mark.asyncio
+async def test_close_writes_db_on_force_liq():
+    closer, _, _, _ = _make_closer()
+    closer._rest.post_market_order = AsyncMock(
+        return_value={"status": "ok", "slippage": 0.5}
+    )
+    result = await closer.emergency_close_with_retry("BTC_USDT")
+    assert result == "FORCE_LIQUIDATED_BY_SYSTEM"
+    closer._sqlite.close_position.assert_awaited()
+    kwargs = closer._sqlite.close_position.await_args.kwargs
+    assert kwargs["close_reason"] == "FORCE_LIQUIDATED_BY_SYSTEM"
+
+
+@pytest.mark.asyncio
+async def test_close_no_db_write_on_failure():
+    closer, _, _, _ = _make_closer()
+    closer._rest.post_market_order = AsyncMock(
+        side_effect=Exception("unexpected")
+    )
+    result = await closer.emergency_close_with_retry("BTC_USDT")
+    assert result == "EMERGENCY_FAILED_POSITION_OPEN"
+    closer._sqlite.close_position.assert_not_awaited()

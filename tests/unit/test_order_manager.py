@@ -14,6 +14,8 @@ def _make_deps():
     sqlite_writer.fetch = AsyncMock(return_value=[])
     sqlite_writer.get_version = AsyncMock(return_value=1)
     sqlite_writer.update_position_versioned = AsyncMock(return_value=True)
+    sqlite_writer.open_position = AsyncMock(return_value=None)
+    sqlite_writer.close_position = AsyncMock(return_value=None)
     sealed_store = MagicMock()
     rest_gateway = MagicMock()
     rest_gateway.emergency_close = AsyncMock(return_value=True)
@@ -159,3 +161,94 @@ async def test_on_fill_event_max_retry_exhausted():
 
 def test_no_global_state():
     assert not hasattr(OrderManager, "_filled_by_order")
+
+@pytest.mark.asyncio
+async def test_on_fill_event_opens_position_in_db():
+    """First fill event creates position row."""
+    cfg = OrderManagerConfig()
+    fill_lock = asyncio.Lock()
+    sqlite = MagicMock()
+    sqlite.fetch = AsyncMock(return_value=[])
+    sqlite.get_version = AsyncMock(return_value=0)
+    sqlite.update_position_versioned = AsyncMock(return_value=True)
+    sqlite.open_position = AsyncMock(return_value=None)
+    sqlite.close_position = AsyncMock(return_value=None)
+    sealed = MagicMock()
+    rest = MagicMock()
+    rest.emergency_close = AsyncMock(return_value=True)
+
+    om = OrderManager(cfg, fill_lock, sqlite, sealed, rest)
+    om.register_position("pos1", "BTC_USDT", "LONG", "IN_TOP5", 2)
+
+    await om.on_fill_event("oid1", 1.0, 100.0, 123, "pos1")
+
+    sqlite.open_position.assert_awaited_once()
+    call_kwargs = sqlite.open_position.await_args[0][0]
+    assert call_kwargs["position_id"] == "pos1"
+    assert call_kwargs["symbol"] == "BTC_USDT"
+    assert call_kwargs["side"] == "LONG"
+    assert call_kwargs["universe_status"] == "IN_TOP5"
+    assert call_kwargs["whale_trust_score"] == 2
+
+
+@pytest.mark.asyncio
+async def test_on_fill_event_opens_position_once():
+    """Second fill on same position does not re-open row."""
+    cfg = OrderManagerConfig()
+    fill_lock = asyncio.Lock()
+    sqlite = MagicMock()
+    sqlite.fetch = AsyncMock(return_value=[])
+    sqlite.get_version = AsyncMock(return_value=0)
+    sqlite.update_position_versioned = AsyncMock(return_value=True)
+    sqlite.open_position = AsyncMock(return_value=None)
+    sqlite.close_position = AsyncMock(return_value=None)
+    sealed = MagicMock()
+    rest = MagicMock()
+    rest.emergency_close = AsyncMock(return_value=True)
+
+    om = OrderManager(cfg, fill_lock, sqlite, sealed, rest)
+    om.register_position("pos1", "BTC_USDT", "LONG")
+
+    await om.on_fill_event("oid1", 0.5, 100.0, 100, "pos1")
+    await om.on_fill_event("oid2", 0.5, 101.0, 200, "pos1")
+
+    assert sqlite.open_position.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_on_fill_event_flip_closes_position_in_db():
+    cfg = OrderManagerConfig()
+    fill_lock = asyncio.Lock()
+    sqlite = MagicMock()
+    sqlite.fetch = AsyncMock(return_value=[])
+    sqlite.get_version = AsyncMock(return_value=0)
+    sqlite.update_position_versioned = AsyncMock(return_value=True)
+    sqlite.open_position = AsyncMock(return_value=None)
+    sqlite.close_position = AsyncMock(return_value=None)
+    sealed = MagicMock()
+    rest = MagicMock()
+    rest.emergency_close = AsyncMock(return_value=True)
+
+    om = OrderManager(cfg, fill_lock, sqlite, sealed, rest)
+    om.register_position("pos1", "BTC_USDT", "LONG")
+    om._filled_by_order["oid1"] = 1.0
+
+    await om.on_fill_event("oid1", -1.0, 100.0, 123, "pos1")
+
+    sqlite.close_position.assert_awaited()
+    kwargs = sqlite.close_position.await_args.kwargs
+    assert kwargs["position_id"] == "pos1"
+    assert kwargs["close_reason"] == "FLIP"
+
+
+@pytest.mark.asyncio
+async def test_register_position_stores_metadata():
+    cfg = OrderManagerConfig()
+    fill_lock = asyncio.Lock()
+    sqlite = MagicMock()
+    om = OrderManager(cfg, fill_lock, sqlite, MagicMock(), MagicMock())
+    om.register_position("pos1", "BTC_USDT", "SHORT", "IN_TOP10", 3)
+    assert om._position_symbol["pos1"] == "BTC_USDT"
+    assert om._position_side["pos1"] == "SHORT"
+    assert om._position_universe["pos1"] == "IN_TOP10"
+    assert om._position_whale_trust["pos1"] == 3    

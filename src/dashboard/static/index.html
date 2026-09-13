@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MikoV2 Dashboard</title>
+<script src="/static/chart.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --dim: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    padding: 12px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  .status { display: flex; gap: 16px; align-items: center; }
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .dot.ok { background: var(--green); }
+  .dot.err { background: var(--red); }
+  .dot.warn { background: var(--yellow); }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+  .metrics { display: flex; flex-wrap: wrap; gap: 14px; }
+  .metric { min-width: 110px; }
+  .metric .label { color: var(--dim); font-size: 11px; }
+  .metric .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .metric .value.green { color: var(--green); }
+  .metric .value.red { color: var(--red); }
+  .metric .value.yellow { color: var(--yellow); }
+  .metric .value.blue { color: var(--blue); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--dim); font-weight: 500; font-size: 11px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .badge.LONG { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.SHORT { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge.TOP5 { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.TOP10 { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge.PENDING { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge.whale { background: rgba(88,166,255,0.15); color: var(--blue); }
+  .badge.spoof { background: rgba(248,81,73,0.15); color: var(--red); }
+  .scroll { overflow-y: auto; max-height: 320px; }
+  #equity-chart {
+    width: 100%;
+    height: 200px !important;
+    margin-top: auto;
+  }
+  .empty { color: var(--dim); text-align: center; padding: 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MikoV2 Dashboard</h1>
+  <div class="status">
+    <span id="sse-status"><span class="dot warn"></span>connecting</span>
+    <span id="uptime">-</span>
+    <span id="last-update">-</span>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- Panel 1: Kasa -->
+  <div class="panel" id="panel-kasa">
+    <h2>Kasa / Risk</h2>
+    <div class="metrics">
+      <div class="metric">
+        <div class="label">Balance</div>
+        <div class="value" id="k-balance">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Equity</div>
+        <div class="value" id="k-equity">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Unrealized</div>
+        <div class="value" id="k-unrealized">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Realized Today</div>
+        <div class="value" id="k-realized">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Drawdown</div>
+        <div class="value" id="k-drawdown">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Open Positions</div>
+        <div class="value" id="k-open">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Win Rate</div>
+        <div class="value" id="k-winrate">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Total Trades</div>
+        <div class="value" id="k-trades">-</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 2: Pozisyonlar -->
+  <div class="panel" id="panel-pos">
+    <h2>Pozisyonlar (Açık)</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Side</th>
+            <th>Universe</th>
+            <th class="num">Avg</th>
+            <th class="num">Qty</th>
+            <th class="num">Whale</th>
+          </tr>
+        </thead>
+        <tbody id="pos-open-body">
+          <tr><td colspan="6" class="empty">-</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h2 style="margin-top:10px">Son Kapanan (5)</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Side</th>
+            <th>Reason</th>
+            <th class="num">PnL</th>
+            <th class="num">R</th>
+          </tr>
+        </thead>
+        <tbody id="pos-closed-body">
+          <tr><td colspan="5" class="empty">-</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Panel 3: Balina -->
+  <div class="panel" id="panel-whale">
+    <h2>Balina Likidite (son 20)</h2>
+    <div class="scroll" style="max-height:340px">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th class="num">Price</th>
+            <th class="num">OI Delta</th>
+            <th class="num">Fill</th>
+            <th>Tag</th>
+            <th class="num">Trust</th>
+          </tr>
+        </thead>
+        <tbody id="whale-body">
+          <tr><td colspan="6" class="empty">-</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Panel 4: Health + Equity chart -->
+  <div class="panel" id="panel-health">
+    <h2>Health Metrics</h2>
+    <div class="metrics">
+      <div class="metric">
+        <div class="label">Uptime</div>
+        <div class="value" id="h-uptime">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Total Positions</div>
+        <div class="value" id="h-positions">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Whale Events</div>
+        <div class="value" id="h-whales">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Equity Points</div>
+        <div class="value" id="h-points">-</div>
+      </div>
+    </div>
+    <canvas id="equity-chart"></canvas>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  const state = {
+    sse: null,
+    chart: null,
+    lastData: { equity: [], positions: null, whales: null, pnl: null, metrics: null, health: null },
+  };
+
+  function fmtNum(v, digits) {
+    if (v === null || v === undefined || isNaN(v)) return "-";
+    return Number(v).toFixed(digits === undefined ? 2 : digits);
+  }
+  function fmtPct(v, digits) {
+    if (v === null || v === undefined || isNaN(v)) return "-";
+    return (Number(v) * 100).toFixed(digits === undefined ? 2 : digits) + "%";
+  }
+  function fmtUsd(v) {
+    if (v === null || v === undefined || isNaN(v)) return "-";
+    const n = Number(v);
+    const sign = n >= 0 ? "" : "-";
+    return sign + "$" + Math.abs(n).toFixed(2);
+  }
+  function fmtUptime(s) {
+    if (!s) return "-";
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = Math.floor(s % 60);
+    return h + "h " + m + "m " + sec + "s";
+  }
+  function el(id) { return document.getElementById(id); }
+  function setText(id, txt) { const e = el(id); if (e) e.textContent = txt; }
+  function setClass(id, cls) {
+    const e = el(id);
+    if (!e) return;
+    e.className = "value " + (cls || "");
+  }
+  function pnlClass(v) {
+    if (v === null || v === undefined || isNaN(v)) return "";
+    return Number(v) >= 0 ? "green" : "red";
+  }
+
+  async function fetchJson(path) {
+    try {
+      const r = await fetch(path, { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (e) {
+      console.warn("fetch failed", path, e);
+      return null;
+    }
+  }
+
+  function renderKasa(pnlData, equityData, healthData) {
+    const latest = equityData && equityData.latest;
+    if (latest) {
+      setText("k-balance", fmtUsd(latest.balance));
+      setText("k-equity", fmtUsd(latest.equity));
+      setText("k-unrealized", fmtUsd(latest.unrealized_pnl));
+      setClass("k-unrealized", pnlClass(latest.unrealized_pnl));
+      setText("k-realized", fmtUsd(latest.realized_today));
+      setClass("k-realized", pnlClass(latest.realized_today));
+      setText("k-drawdown", fmtPct(latest.drawdown_pct));
+      setClass("k-drawdown", latest.drawdown_pct > 0.03 ? "red" : (latest.drawdown_pct > 0.01 ? "yellow" : ""));
+      setText("k-open", String(latest.open_positions));
+    }
+    if (pnlData && pnlData.all_time) {
+      const at = pnlData.all_time;
+      setText("k-winrate", fmtPct(at.win_rate, 1));
+      setClass("k-winrate", at.win_rate >= 0.5 ? "green" : "yellow");
+      setText("k-trades", String(at.trades || 0));
+    }
+  }
+
+  function renderPositions(posData) {
+    const openBody = el("pos-open-body");
+    const closedBody = el("pos-closed-body");
+    if (!posData) return;
+    const open = posData.open || [];
+    const closed = (posData.closed || []).slice(0, 5);
+
+    if (open.length === 0) {
+      openBody.innerHTML = '<tr><td colspan="6" class="empty">no open positions</td></tr>';
+    } else {
+      openBody.innerHTML = open.map(p => {
+        const universeClass = p.universe_status === "IN_TOP5" ? "TOP5"
+                            : p.universe_status === "IN_TOP10" ? "TOP10"
+                            : p.universe_status === "OUTSIDE_PENDING" ? "PENDING" : "";
+        return `<tr>
+          <td>${p.symbol || "-"}</td>
+          <td><span class="badge ${p.side}">${p.side || "-"}</span></td>
+          <td>${universeClass ? '<span class="badge ' + universeClass + '">' + p.universe_status + '</span>' : (p.universe_status || "-")}</td>
+          <td class="num">${fmtNum(p.avg, 2)}</td>
+          <td class="num">${fmtNum(p.qty_remaining, 4)}</td>
+          <td class="num">${p.whale_trust_score || 0}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    if (closed.length === 0) {
+      closedBody.innerHTML = '<tr><td colspan="5" class="empty">no closed positions</td></tr>';
+    } else {
+      closedBody.innerHTML = closed.map(p => {
+        const pnlCls = p.realized_pnl >= 0 ? "green" : "red";
+        return `<tr>
+          <td>${p.symbol || "-"}</td>
+          <td><span class="badge ${p.side}">${p.side || "-"}</span></td>
+          <td>${p.close_reason || "-"}</td>
+          <td class="num" style="color:var(--${pnlCls})">${fmtUsd(p.realized_pnl)}</td>
+          <td class="num">${p.r_multiple !== null && p.r_multiple !== undefined ? fmtNum(p.r_multiple, 2) : "-"}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+
+  function renderWhales(whaleData) {
+    const body = el("whale-body");
+    if (!whaleData || !whaleData.whales) return;
+    const list = whaleData.whales.slice(0, 20);
+    if (list.length === 0) {
+      body.innerHTML = '<tr><td colspan="6" class="empty">no whale events</td></tr>';
+      setText("h-whales", "0");
+      return;
+    }
+    setText("h-whales", String(list.length));
+    body.innerHTML = list.map(w => {
+      let tag = "-";
+      if (w.is_spoof) tag = '<span class="badge spoof">SPOOF</span>';
+      else if (w.is_real) tag = '<span class="badge whale">REAL</span>';
+      return `<tr>
+        <td>${w.symbol || "-"}</td>
+        <td class="num">${fmtNum(w.price, 2)}</td>
+        <td class="num">${fmtUsd(w.oi_delta_usd)}</td>
+        <td class="num">${fmtPct(w.fill_ratio, 0)}</td>
+        <td>${tag}</td>
+        <td class="num">${w.trust_score || 0}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderHealth(healthData, metricsData, equityData) {
+    if (healthData) {
+      setText("h-uptime", fmtUptime(healthData.uptime_s));
+      setText("h-positions", String(healthData.open_positions || 0));
+    }
+    if (metricsData) {
+      if (metricsData.uptime_s !== undefined) setText("h-uptime", fmtUptime(metricsData.uptime_s));
+      if (metricsData.total_positions !== undefined) setText("h-positions", String(metricsData.total_positions));
+    }
+    if (equityData && equityData.points) {
+      setText("h-points", String(equityData.points.length));
+      updateEquityChart(equityData.points);
+    }
+  }
+
+  function updateEquityChart(points) {
+    if (!window.Chart) return;
+    const labels = points.map(p => {
+      const d = new Date(p.ts_ms);
+      return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0");
+    });
+    const data = points.map(p => p.equity);
+
+    if (state.chart === null) {
+      const ctx = el("equity-chart").getContext("2d");
+      state.chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Equity",
+            data: data,
+            borderColor: "#58a6ff",
+            backgroundColor: "rgba(88,166,255,0.1)",
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              grid: { color: "#21262d" },
+              ticks: { color: "#8b949e", font: { size: 10 }, maxTicksLimit: 6 }
+            },
+            y: {
+              grid: { color: "#21262d" },
+              ticks: { color: "#8b949e", font: { size: 10 } }
+            }
+          }
+        }
+      });
+    } else {
+      state.chart.data.labels = labels;
+      state.chart.data.datasets[0].data = data;
+      state.chart.update("none");
+    }
+  }
+
+  async function refreshAll() {
+    const [pos, whales, equity, pnl, metrics, health] = await Promise.all([
+      fetchJson("/api/v2/positions?limit=100"),
+      fetchJson("/api/v2/whales?limit=20"),
+      fetchJson("/api/v2/equity"),
+      fetchJson("/api/v2/pnl"),
+      fetchJson("/api/v2/metrics"),
+      fetchJson("/api/v2/health"),
+    ]);
+
+    state.lastData.positions = pos;
+    state.lastData.whales = whales;
+    state.lastData.equity = equity;
+    state.lastData.pnl = pnl;
+    state.lastData.metrics = metrics;
+    state.lastData.health = health;
+
+    renderKasa(pnl, equity, health);
+    renderPositions(pos);
+    renderWhales(whales);
+    renderHealth(health, metrics, equity);
+
+    const now = new Date();
+    setText("last-update", "updated " + now.toLocaleTimeString());
+  }
+
+  function connectSSE() {
+    if (state.sse) {
+      try { state.sse.close(); } catch (e) {}
+    }
+    const sse = new EventSource("/api/v2/sse");
+    state.sse = sse;
+    sse.onopen = () => {
+      const st = el("sse-status");
+      if (st) st.innerHTML = '<span class="dot ok"></span>connected';
+    };
+    sse.onerror = () => {
+      const st = el("sse-status");
+      if (st) st.innerHTML = '<span class="dot err"></span>disconnected';
+      // EventSource auto-reconnects
+    };
+    sse.addEventListener("keepalive", () => {
+      refreshAll();
+    });
+    ["position_opened", "position_closed", "whale_event", "emergency"].forEach(evt => {
+      sse.addEventListener(evt, () => refreshAll());
+    });
+  }
+
+  // bootstrap
+  window.addEventListener("load", async () => {
+    await refreshAll();
+    connectSSE();
+    // polling fallback every 5s
+    setInterval(refreshAll, 5000);
+  });
+
+})();
+</script>
+</body>
+</html>

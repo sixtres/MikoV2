@@ -36,16 +36,19 @@ MikoV2 — Kripto vadeli bot. Python 3.10 + asyncio + mp.Queue + Numba
 - Her kod bloğu sonrası pytest
 
 ## FAZ 9 İş Listesi
-İş 1   — DB şema genişletme (positions+15, orders+5, 3 yeni tablo)
-İş 2   — Universe scanner (takip only, Top5 sabit)
-İş 2.5 — micro_trigger (FVG_OTE state machine)
-İş 3   — Position lifecycle (fill → DB yazımı)
-İş 4   — Dashboard backend (aiohttp.web, 7 endpoint)
-İş 5   — Frontend (4 panel + SSE + Chart.js)
-İş 6   — E2E smoke (shadow + dashboard birlikte)
+#	İş	Süre
+1	DB şema genişletme	30 dk
+2	Universe scanner (takip)	30 dk
+3	micro_trigger	45 dk
+4	Position lifecycle (DB yazımı)	30 dk
+5	Dashboard backend (aiohttp.web)	45 dk
+6	Frontend (4 panel + Chart.js)	60 dk
+7	E2E smoke	15 dk
+8	Boş chaos dosyalarını doldur (4 adet: dust_sweep, flip, ip_ban, ws_ping_timeout)	40 dk
+9	test_shadow.py içeriğini kontrol et/güncelle	10 dk
+Sıra: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 
-## Bağımlılık
-1 → 2 → 2.5 → 3 → 4 → 5 → 6
+8 ve 9 sona — çünkü production'a yakın olgunluk testleri.
 
 ## Test Toplamı
 unit 397 + integration 100 + chaos 31 + shadow 5 = 533 test PASS
