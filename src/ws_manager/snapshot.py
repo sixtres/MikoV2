@@ -46,7 +46,10 @@ class SnapshotFetcher:
 
     async def fetch(self, symbol: str) -> Any | None:
         try:
-            await self._token_bucket.acquire()
+            acquired = await self._token_bucket.acquire()
+            if not acquired:
+                logger.warning("token bucket acquire returned False")
+                return None
         except Exception as e:
             logger.warning("token bucket acquire failed: %s", e)
             return None

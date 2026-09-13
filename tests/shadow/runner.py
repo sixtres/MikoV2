@@ -40,6 +40,7 @@ logger = logging.getLogger("shadow")
 
 class ShadowMetrics:
     def __init__(self) -> None:
+        self.buffered_pushes = 0        
         self.pushes = 0
         self.gaps = 0
         self.resyncs = 0
@@ -67,6 +68,7 @@ class ShadowMetrics:
             "obi_avg": round(obi_avg, 6),
             "max_bids_len": self.max_bids_len,
             "max_asks_len": self.max_asks_len,
+            "buffered_pushes": self.buffered_pushes,            
         }
 
 
@@ -115,8 +117,7 @@ class ShadowRunner:
             return
         self.l2_buffer.apply_batch(
             self.symbol, diffs, batch_epoch=book.seq_epoch.get(self.symbol, 0)
-        )
-        self.metrics.valid += 1
+        )        
         self.metrics.max_bids_len = max(self.metrics.max_bids_len, book.bids_len)
         self.metrics.max_asks_len = max(self.metrics.max_asks_len, book.asks_len)
         try:
@@ -144,18 +145,21 @@ class ShadowRunner:
     async def on_depth(self, symbol: str, data: dict) -> None:
         if symbol != self.symbol:
             return
-        self.metrics.pushes += 1
         version = data.get("version")
         if version is None:
             return
         version = int(version)
 
-        # Buffering phase: WS connected but snapshot not yet applied
+        # Buffering phase: WS connected but snapshot not yet applied.
+        # Not counted as a live push.
         if not self.synced:
             self.pending.append({"version": version, "data": data})
+            self.metrics.buffered_pushes += 1
             return
 
-        # Live phase: use seq validator
+        # Live phase only
+        self.metrics.pushes += 1
+
         result = await self.seq_validator.validate(
             self.symbol, self.current_epoch, first_u=version
         )
@@ -175,9 +179,14 @@ class ShadowRunner:
                 self.metrics.gaps += 1
             else:
                 self.metrics.stale_drops += 1
+                logger.debug(
+                    "stale version=%d last=%d",
+                    version, result.last_u,
+                )
             return
 
         self._apply_push(data)
+        self.metrics.valid += 1
         self.last_applied_version = version
 
     # ---- bootstrap ----

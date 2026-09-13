@@ -1,0 +1,14 @@
+{
+  "symbol": "BTC_USDT",
+  "uptime_s": 301.86,
+  "pushes": 1328,
+  "valid": 1328,
+  "gaps": 0,
+  "resyncs": 1,
+  "stale_drops": 0,
+  "obi_samples": 1328,
+  "obi_avg": 0.006212,
+  "max_bids_len": 1137,
+  "max_asks_len": 1112,
+  "buffered_pushes": 4
+}

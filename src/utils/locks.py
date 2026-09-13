@@ -167,7 +167,7 @@ def is_asyncio_lock(lock: object) -> bool:
     if isinstance(lock, asyncio.Lock):
         return True
     name = type(lock).__name__
-    if name == "_RLock":
+    if name in ("_RLock", "RLock"):
         return False
     if name == "lock":
         raise ValueError("FATAL: threading.Lock YASAK, use RLock for buffer_lock or asyncio.Lock")
