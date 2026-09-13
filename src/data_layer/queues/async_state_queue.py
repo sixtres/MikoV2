@@ -89,17 +89,16 @@ class AsyncStateQueue:
         self._drain_remaining()
 
     def _drain_remaining(self) -> None:
-        # Y-337 drain() SIGTERM zorunlu
+        # Y-337 drain: kalan item'lari mp_queue'ya aktar.
+        # Blocking put YASAK (event loop kilitler); DROP if full.
         try:
             while True:
                 item = self._async_queue.get_nowait()
                 try:
-                    self._mp_queue.put(item)
+                    self._mp_queue.put_nowait(item)
                 except Exception:
-                    try:
-                        self._mp_queue.put_nowait(item)
-                    except Exception as e:
-                        logger.warning("drain mp put failed: %s", e)
+                    # mp_queue dolu veya kapali; drain baglaminda DROP
+                    pass
                 try:
                     self._async_queue.task_done()
                 except Exception:
@@ -112,7 +111,7 @@ class AsyncStateQueue:
     async def put(self, item) -> None:
         await self._async_queue.put(item)
 
-    async def _writer_loop(self) -> None:
+    async def _writer_loop(self) -> None:    
         while self._running:
             try:
                 item = await asyncio.wait_for(self._async_queue.get(), timeout=0.1)
@@ -121,19 +120,18 @@ class AsyncStateQueue:
             except asyncio.CancelledError:
                 break
 
-            try:
+            # DROP_NEVER: retry with async sleep, never block event loop
+            while self._running:
                 try:
                     self._mp_queue.put_nowait(item)
+                    break
                 except Exception:
-                    # DROP_NEVER blocking put
-                    self._mp_queue.put(item)
-            except Exception as e:
-                logger.warning("mp_queue put failed: %s", e)
-                await asyncio.sleep(0.01)
-                try:
-                    self._async_queue.put_nowait(item)
-                except Exception:
-                    pass
+                    # mp.Queue full; yield and retry (async, no blocking)
+                    await asyncio.sleep(0.01)
+            try:
+                self._async_queue.task_done()
+            except Exception:
+                pass
             finally:
                 try:
                     self._async_queue.task_done()
