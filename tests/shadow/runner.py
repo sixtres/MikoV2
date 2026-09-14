@@ -16,6 +16,7 @@ Bootstrap order (correct):
 
 from __future__ import annotations
 
+import sqlite3
 import argparse
 import asyncio
 import json
@@ -73,7 +74,9 @@ class ShadowMetrics:
 
 
 class ShadowRunner:
-    def __init__(self, symbol: str, duration_s: int) -> None:
+    def __init__(self, symbol: str, duration_s: int, db_path: Path | None = None) -> None:
+        self.db_path = db_path
+        self._conn: sqlite3.Connection | None = None
         self.symbol = symbol
         self.duration_s = duration_s
         self.metrics = ShadowMetrics()
@@ -321,41 +324,116 @@ class ShadowRunner:
             applied, self.last_applied_version,
         )
 
+
+    async def _flush_snapshot(self) -> None:
+        """Flush current L2Buffer snapshot to SQLite."""
+        if self.db_path is None or self._conn is None:
+            return
+        
+        book = self.l2_buffer.get_book(self.symbol)
+        if book is None:
+            return
+        
+        snapshot_ts = int(time.time() * 1000)
+        version = self.last_applied_version
+        
+        # Serialize bids/asks to JSON
+        bids = [(float(book.bids_price[i]), float(book.bids_qty[i])) 
+                for i in range(min(book.bids_len, 500))]
+        asks = [(float(book.asks_price[i]), float(book.asks_qty[i])) 
+                for i in range(min(book.asks_len, 500))]
+        
+        try:
+            self._conn.execute(
+                """INSERT INTO orderbook_snapshots 
+                (timestamp_ms, symbol, version, bids_json, asks_json, depth)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (snapshot_ts, self.symbol, version, 
+                json.dumps(bids), json.dumps(asks), len(bids))
+            )
+            self._conn.commit()
+            logger.info("flushed snapshot ts=%d version=%d depth=%d", 
+                    snapshot_ts, version, len(bids))
+        except Exception as e:
+            logger.warning("flush failed: %s", e)
     # ---- main ----
 
     async def run(self) -> dict:
         timeout = aiohttp.ClientTimeout(total=5.0)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            self.rest = MEXCRestClient(session)
-
-            # WS FIRST (buffering)
-            self.ws = MEXCWSClient(
-                symbols=[self.symbol],
-                on_depth=self.on_depth,
-                ping_interval_s=12.0,
-                dead_timeout_s=30.0,
+        
+        # Connect SQLite if db_path provided
+        if self.db_path is not None:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._conn = sqlite3.connect(str(self.db_path), timeout=5.0)
+            self._conn.execute(
+                """CREATE TABLE IF NOT EXISTS orderbook_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp_ms INTEGER,
+                    symbol TEXT,
+                    version INTEGER,
+                    bids_json TEXT,
+                    asks_json TEXT,
+                    depth INTEGER
+                )"""
             )
-            await self.ws.connect()
+            self._conn.commit()
+        
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                self.rest = MEXCRestClient(session)
 
-            # Then bootstrap snapshot
-            await self._bootstrap()
+                # WS FIRST (buffering)
+                self.ws = MEXCWSClient(
+                    symbols=[self.symbol],
+                    on_depth=self.on_depth,
+                    ping_interval_s=12.0,
+                    dead_timeout_s=30.0,
+                )
+                await self.ws.connect()
 
-            start = time.monotonic()
-            try:
-                while time.monotonic() - start < self.duration_s:
-                    await asyncio.sleep(5.0)
-                    logger.info(
-                        "tick pushes=%d valid=%d gaps=%d resyncs=%d stale=%d last_v=%d",
-                        self.metrics.pushes,
-                        self.metrics.valid,
-                        self.metrics.gaps,
-                        self.metrics.resyncs,
-                        self.metrics.stale_drops,
-                        self.last_applied_version,
-                    )
-            finally:
-                if self.ws is not None:
-                    await self.ws.close()
+                # Then bootstrap snapshot
+                await self._bootstrap()
+
+                start = time.monotonic()
+                last_flush = time.monotonic()
+                
+                try:
+                    # Infinite loop if duration_s == 0
+                    while self.duration_s == 0 or time.monotonic() - start < self.duration_s:
+                        await asyncio.sleep(5.0)
+                        logger.info(
+                            "tick pushes=%d valid=%d gaps=%d resyncs=%d stale=%d last_v=%d",
+                            self.metrics.pushes,
+                            self.metrics.valid,
+                            self.metrics.gaps,
+                            self.metrics.resyncs,
+                            self.metrics.stale_drops,
+                            self.last_applied_version,
+                        )
+                        
+                        # Periodic flush every 60 seconds
+                        if time.monotonic() - last_flush >= 60.0:
+                            await self._flush_snapshot()
+                            last_flush = time.monotonic()
+                            
+                            # Cleanup old snapshots (keep last 7 days)
+                            if self._conn is not None:
+                                cutoff = int((time.time() - 7*24*3600) * 1000)
+                                try:
+                                    self._conn.execute(
+                                        "DELETE FROM orderbook_snapshots WHERE timestamp_ms < ?",
+                                        (cutoff,)
+                                    )
+                                    self._conn.commit()
+                                except Exception as e:
+                                    logger.warning("cleanup failed: %s", e)
+                finally:
+                    await self._flush_snapshot()   # <- bu satir
+                    if self.ws is not None:
+                        await self.ws.close()
+        finally:
+            if self._conn is not None:
+                self._conn.close()
 
         return self.metrics.to_dict(self.symbol)
 
@@ -365,9 +443,11 @@ def main() -> None:
     parser.add_argument("--symbol", default="BTC_USDT")
     parser.add_argument("--duration", type=int, default=600)
     parser.add_argument("--out", default="shadow_report.json")
+    parser.add_argument("--db", default=None, help="SQLite DB path for persistence")
     args = parser.parse_args()
 
-    runner = ShadowRunner(args.symbol, args.duration)
+    db_path = Path(args.db) if args.db else None
+    runner = ShadowRunner(args.symbol, args.duration, db_path=db_path)
     report = asyncio.run(runner.run())
 
     out_path = Path(args.out)
