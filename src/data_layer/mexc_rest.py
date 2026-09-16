@@ -165,3 +165,25 @@ class MEXCRestClient:
             except (TypeError, ValueError):
                 continue
         return out
+
+    async def fetch_contract_size(self, symbol: str) -> float:
+        """
+        Fetch contract size (base units per contract) for a symbol.
+
+        Endpoint: GET /api/v1/contract/detail
+        Returns float, e.g. 0.0001 for BTC_USDT (1 contract = 0.0001 BTC).
+        """
+        path = "/api/v1/contract/detail"
+        payload = await self._get_json(path)
+        data = payload.get("data") or []
+        if not isinstance(data, list):
+            raise MEXCRestError("contract detail not a list")
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            if item.get("symbol") == symbol:
+                cs = item.get("contractSize")
+                if cs is None:
+                    raise MEXCRestError("no contractSize for %s" % symbol)
+                return float(cs)
+        raise MEXCRestError("symbol not found in contract detail: %s" % symbol)

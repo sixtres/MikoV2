@@ -1,12 +1,12 @@
-# MEXC Futures WS depth client.
+# MEXC Futures WS depth + deal client.
 # Docs: wss://contract.mexc.com/edge
-#   subscribe: {"method":"sub.depth","param":{"symbol":"BTC_USDT"}}
-#   push: {"channel":"push.depth","symbol":"BTC_USDT","data":{...}}
-#   ping: {"method":"ping"} every 10-15s, 60s silence = dead
+#   sub.depth: {"method":"sub.depth","param":{"symbol":"BTC_USDT"}}
+#   sub.deal:  {"method":"sub.deal","param":{"symbol":"BTC_USDT"}}
+#   ping:      {"method":"ping"} every 10-15s, 60s silence = dead
 # Symbol format: BTC_USDT (underscore), futures-only.
 
 """
-MEXC Futures WS depth client (public market data, no auth).
+MEXC Futures WS client (public market data, no auth).
 """
 
 from __future__ import annotations
@@ -24,16 +24,18 @@ DEFAULT_DEAD_TIMEOUT_S = 30.0
 
 # callback: (symbol: str, data: dict) -> None
 DepthCallback = Callable[[str, dict], Awaitable[None]]
+# callback: (symbol: str, trades: list[dict]) -> None
+DealCallback = Callable[[str, list], Awaitable[None]]
 
 
 class MEXCWSClient:
     """
-    Minimal MEXC Futures depth WS client.
+    MEXC Futures WS client. Subscribes to push.depth and optionally push.deal.
 
-    - subscribes to sub.depth for each symbol
-    - calls on_depth(symbol, data) on every push.depth
-    - sends ping every ping_interval_s
-    - considers connection dead if no message in dead_timeout_s
+    - on_depth(symbol, data) on push.depth
+    - on_deal(symbol, trades_list) on push.deal (if provided)
+    - ping every ping_interval_s
+    - dead if no message within dead_timeout_s
     """
 
     def __init__(
@@ -43,9 +45,11 @@ class MEXCWSClient:
         url: str = MEXC_WS_URL,
         ping_interval_s: float = DEFAULT_PING_INTERVAL_S,
         dead_timeout_s: float = DEFAULT_DEAD_TIMEOUT_S,
+        on_deal: DealCallback | None = None,
     ) -> None:
         self.symbols = symbols
         self.on_depth = on_depth
+        self.on_deal = on_deal
         self.url = url
         self.ping_interval_s = ping_interval_s
         self.dead_timeout_s = dead_timeout_s
@@ -62,10 +66,20 @@ class MEXCWSClient:
 
         self._session = aiohttp.ClientSession()
         self._ws = await self._session.ws_connect(self.url, heartbeat=None)
+
         for sym in self.symbols:
-            sub = {"method": "sub.depth", "param": {"symbol": sym}}
-            await self._ws.send_json(sub)
-            logger.warning("MEXC subscribed symbol=%s", sym)
+            await self._ws.send_json(
+                {"method": "sub.depth", "param": {"symbol": sym}}
+            )
+            logger.warning("MEXC subscribed depth symbol=%s", sym)
+
+        if self.on_deal is not None:
+            for sym in self.symbols:
+                await self._ws.send_json(
+                    {"method": "sub.deal", "param": {"symbol": sym}}
+                )
+                logger.warning("MEXC subscribed deal symbol=%s", sym)
+
         self._running = True
         self._last_msg_mono = asyncio.get_event_loop().time()
         self._read_task = asyncio.create_task(self._read_loop())
@@ -111,16 +125,30 @@ class MEXCWSClient:
 
     async def _handle_message(self, msg: dict) -> None:
         channel = msg.get("channel")
-        if channel != "push.depth":
+        if channel == "push.depth":
+            symbol = msg.get("symbol")
+            data = msg.get("data")
+            if not symbol or not isinstance(data, dict):
+                return
+            try:
+                await self.on_depth(symbol, data)
+            except Exception as e:
+                logger.warning("MEXC on_depth failed symbol=%s err=%s", symbol, e)
             return
-        symbol = msg.get("symbol")
-        data = msg.get("data")
-        if not symbol or not isinstance(data, dict):
+
+        if channel == "push.deal":
+            symbol = msg.get("symbol")
+            trades = msg.get("data")
+            if not symbol or not isinstance(trades, list):
+                return
+            if self.on_deal is not None:
+                try:
+                    await self.on_deal(symbol, trades)
+                except Exception as e:
+                    logger.warning("MEXC on_deal failed symbol=%s err=%s", symbol, e)
             return
-        try:
-            await self.on_depth(symbol, data)
-        except Exception as e:
-            logger.warning("MEXC on_depth failed symbol=%s err=%s", symbol, e)
+
+        # rs.sub.deal, rs.sub.depth, pong etc. ignored
 
     async def close(self) -> None:
         self._running = False
