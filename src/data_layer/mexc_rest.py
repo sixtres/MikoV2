@@ -187,3 +187,39 @@ class MEXCRestClient:
                     raise MEXCRestError("no contractSize for %s" % symbol)
                 return float(cs)
         raise MEXCRestError("symbol not found in contract detail: %s" % symbol)
+
+    async def fetch_ticker(self, symbol: str) -> dict:
+        """
+        Fetch ticker for a symbol. Includes OI (holdVol).
+        """
+        path = "/api/v1/contract/ticker"
+        payload = await self._get_json(path, params={"symbol": symbol})
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise MEXCRestError("ticker data not dict for %s" % symbol)
+        return {
+            "symbol": data.get("symbol"),
+            "last_price": float(data.get("lastPrice", 0.0)),
+            "fair_price": float(data.get("fairPrice", 0.0)),
+            "index_price": float(data.get("indexPrice", 0.0)),
+            "hold_vol": float(data.get("holdVol", 0.0)),
+            "funding_rate": float(data.get("fundingRate", 0.0)),
+            "ts_ms": int(data.get("timestamp", 0)),
+        }
+
+    async def fetch_funding_rate(self, symbol: str) -> dict:
+        """
+        Fetch funding rate + next settle time.
+        """
+        path = "/api/v1/contract/funding_rate/%s" % symbol
+        payload = await self._get_json(path)
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise MEXCRestError("funding data not dict for %s" % symbol)
+        return {
+            "symbol": data.get("symbol"),
+            "funding_rate": float(data.get("fundingRate", 0.0)),
+            "next_settle_ms": int(data.get("nextSettleTime", 0)),
+            "collect_cycle_h": int(data.get("collectCycle", 0)),
+            "ts_ms": int(data.get("timestamp", 0)),
+        }    

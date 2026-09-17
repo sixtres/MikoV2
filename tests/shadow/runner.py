@@ -13,6 +13,7 @@ Bootstrap order:
   6. If still behind, use depth_commits bridge
   7. Live: depth -> L2Buffer -> 60s SQLite flush
            deal  -> 1s OHLCV USDT-normalized bucket -> SQLite flush
+           ticker poll (60s) -> OI + mark + funding -> tickers_snapshot
 """
 
 from __future__ import annotations
@@ -57,6 +58,8 @@ class ShadowMetrics:
         self.trades_unknown_side = 0
         self.trades_late = 0
         self.ohlcv_flushed = 0
+        self.tickers_polled = 0
+        self.tickers_failed = 0
         self.contract_size = 0.0
         self.start_mono = time.monotonic()
 
@@ -87,11 +90,15 @@ class ShadowMetrics:
             "trades_unknown_side": self.trades_unknown_side,
             "trades_late": self.trades_late,
             "ohlcv_flushed": self.ohlcv_flushed,
+            "tickers_polled": self.tickers_polled,
+            "tickers_failed": self.tickers_failed,
             "contract_size": self.contract_size,
         }
 
 
 class ShadowRunner:
+    TICKERS_INTERVAL_S = 60.0
+
     def __init__(
         self,
         symbol: str,
@@ -228,12 +235,10 @@ class ShadowRunner:
                 self.metrics.trades_dropped += 1
                 continue
 
-            # RISK #4: whitelist T in {1,2}
             if side not in (1, 2):
                 self.metrics.trades_unknown_side += 1
                 continue
 
-            # BUG #3: normalize to USDT (contracts * contract_size * price)
             usdt_vol = contracts * self._contract_size * price
             if usdt_vol <= 0:
                 self.metrics.trades_dropped += 1
@@ -248,7 +253,6 @@ class ShadowRunner:
         sec = ts_ms // 1000
         b = self._ohlcv_buffer.get(symbol)
 
-        # RISK #8: late trade from an older second -> drop
         if b is not None and sec < b["sec"]:
             self.metrics.trades_late += 1
             return
@@ -304,6 +308,61 @@ class ShadowRunner:
             self.metrics.ohlcv_flushed += 1
         except Exception as e:
             logger.warning("flush_ohlcv failed sec=%d err=%s", b["sec"], e)
+
+    # ---------------------------------------------------------------- tickers poll
+
+    async def _tickers_poll_task(self) -> None:
+        """Poll ticker + funding REST every N seconds, store snapshot."""
+        while not self._shutdown_event.is_set():
+            try:
+                ticker = await self.rest.fetch_ticker(self.symbol)
+                funding = await self.rest.fetch_funding_rate(self.symbol)
+                oi_usdt = (
+                    ticker["hold_vol"]
+                    * self._contract_size
+                    * ticker["last_price"]
+                )
+                self._insert_ticker_snapshot(ticker, funding, oi_usdt)
+                self.metrics.tickers_polled += 1
+            except Exception as e:
+                self.metrics.tickers_failed += 1
+                logger.warning("tickers poll failed: %s", e)
+
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self.TICKERS_INTERVAL_S,
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+
+    def _insert_ticker_snapshot(
+        self, ticker: dict, funding: dict, oi_usdt: float
+    ) -> None:
+        if self._conn is None:
+            return
+        try:
+            self._conn.execute(
+                """INSERT INTO tickers_snapshot
+                (ts_ms, symbol, last_price, fair_price, index_price,
+                 hold_vol, oi_usdt, funding_rate, next_settle_ms)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (
+                    ticker["ts_ms"],
+                    ticker["symbol"],
+                    ticker["last_price"],
+                    ticker["fair_price"],
+                    ticker["index_price"],
+                    ticker["hold_vol"],
+                    oi_usdt,
+                    funding["funding_rate"],
+                    funding["next_settle_ms"],
+                ),
+            )
+            self._conn.commit()
+        except Exception as e:
+            logger.warning("ticker insert failed: %s", e)
 
     # ---------------------------------------------------------------- bootstrap
 
@@ -507,12 +566,30 @@ class ShadowRunner:
             )"""
         )
         self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS tickers_snapshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts_ms INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                last_price REAL,
+                fair_price REAL,
+                index_price REAL,
+                hold_vol REAL,
+                oi_usdt REAL,
+                funding_rate REAL,
+                next_settle_ms INTEGER
+            )"""
+        )
+        self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ohlcv_symbol_sec "
             "ON trades_ohlcv_1s(symbol, sec)"
         )
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_ts "
             "ON orderbook_snapshots(timestamp_ms)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tickers_ts "
+            "ON tickers_snapshot(ts_ms)"
         )
         self._conn.commit()
 
@@ -521,7 +598,6 @@ class ShadowRunner:
             loop = asyncio.get_event_loop()
             loop.add_signal_handler(signal.SIGTERM, self._shutdown_event.set)
         except (NotImplementedError, AttributeError, ValueError):
-            # Windows / non-main thread — skip
             pass
 
     async def run(self) -> dict:
@@ -532,7 +608,7 @@ class ShadowRunner:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 self.rest = MEXCRestClient(session)
 
-                # BUG #3: contract_size for USDT normalization
+                # contract_size for USDT normalization
                 try:
                     self._contract_size = await self.rest.fetch_contract_size(
                         self.symbol
@@ -560,9 +636,12 @@ class ShadowRunner:
                 await self.ws.connect()
                 await self._bootstrap()
 
-                # RISK #2: SIGTERM handler
                 self._install_sigterm()
-                # Data starvation watchdog: shutdown_event tetikle
+
+                # Tickers REST poll (OI + funding)
+                asyncio.create_task(self._tickers_poll_task())
+
+                # WS data starvation watchdog
                 async def ws_watchdog():
                     while not self._shutdown_event.is_set():
                         await asyncio.sleep(15)
@@ -579,6 +658,7 @@ class ShadowRunner:
                             return
 
                 asyncio.create_task(ws_watchdog())
+
                 start = time.monotonic()
                 last_flush = time.monotonic()
                 try:
@@ -593,7 +673,7 @@ class ShadowRunner:
                         logger.info(
                             "tick pushes=%d valid=%d gaps=%d resyncs=%d "
                             "stale=%d trades=%d drop=%d side_bad=%d late=%d "
-                            "ohlcv=%d last_v=%d",
+                            "ohlcv=%d tickers=%d tickers_fail=%d last_v=%d",
                             self.metrics.pushes,
                             self.metrics.valid,
                             self.metrics.gaps,
@@ -604,6 +684,8 @@ class ShadowRunner:
                             self.metrics.trades_unknown_side,
                             self.metrics.trades_late,
                             self.metrics.ohlcv_flushed,
+                            self.metrics.tickers_polled,
+                            self.metrics.tickers_failed,
                             self.last_applied_version,
                         )
 
@@ -625,6 +707,11 @@ class ShadowRunner:
                                         "DELETE FROM trades_ohlcv_1s "
                                         "WHERE sec < ?",
                                         (cutoff_sec,),
+                                    )
+                                    self._conn.execute(
+                                        "DELETE FROM tickers_snapshot "
+                                        "WHERE ts_ms < ?",
+                                        (cutoff_ms,),
                                     )
                                     self._conn.commit()
                                 except Exception as e:
