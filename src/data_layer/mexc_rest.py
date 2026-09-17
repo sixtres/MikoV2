@@ -207,6 +207,34 @@ class MEXCRestClient:
             "ts_ms": int(data.get("timestamp", 0)),
         }
 
+    async def fetch_all_tickers(self) -> list[dict]:
+        """
+        Fetch ALL futures symbols in one bulk request (~1184 symbols).
+        """
+        path = "/api/v1/contract/ticker"
+        payload = await self._get_json(path)
+        data = payload.get("data") or []
+        if not isinstance(data, list):
+            raise MEXCRestError("bulk ticker not a list")
+        out: list[dict] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            sym = item.get("symbol")
+            if not sym:
+                continue
+            out.append({
+                "symbol": sym,
+                "last_price": float(item.get("lastPrice", 0.0)),
+                "bid1": float(item.get("bid1", 0.0)),
+                "ask1": float(item.get("ask1", 0.0)),
+                "hold_vol": float(item.get("holdVol", 0.0)),
+                "amount24": float(item.get("amount24", 0.0)),
+                "funding_rate": float(item.get("fundingRate", 0.0)),
+                "ts_ms": int(item.get("timestamp", 0)),
+            })
+        return out
+
     async def fetch_funding_rate(self, symbol: str) -> dict:
         """
         Fetch funding rate + next settle time.
