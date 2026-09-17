@@ -1,0 +1,50 @@
+BAĞLAM — MikoV2 REV9 — Yeni Sohbet Başlangıcı
+Tarih: 2026-09-17
+
+Oku
+docs/rev9/DURUM.md (ana referans)
+
+docs/rev5/MikoV2-AnaYasa-REV5.md (116 YAMA)
+
+docs/rev5/MikoV2-Proje-Tum-Moduller-REV5.md (modül pseudo)
+
+Şu An Nerede
+FAZ 9 kapandı: dashboard + universe scanner + shadow collector çalışıyor
+
+VM'de 4 günlük veri toplama aktif (L2 depth + OHLCV 1s + tickers)
+
+Backtest: ReplayTransport + engine + signal detector + strategy hazır
+
+Test: ~700+ PASS
+
+Sıradaki İş
+B2c — Position simulator + PnL ölçümü
+
+src/backtest/position_sim.py yaz
+
+Max 1 pozisyon per symbol, multi-symbol concurrent
+
+TP/SL exit (5s OHLCV high/low), fee taker 0.0002, leverage-adjusted slippage
+
+Rapor: trade listesi, win rate, avg R, max DD, total return
+
+Açık Buglar (B2c içinde kapatılacak)
+Universe: aşırı funding (|f| > 0.5%) skorda ceza almalı
+
+Universe: emtia/hisse semboller exclude listesine (XAUT, SILVER, UKOIL, USOIL, SPCXSTOCK)
+
+Kurallar
+Python 3.10 (3.11+ syntax YASAK: except*, TaskGroup)
+
+from .. boşluklu zorunlu
+
+f-string log YASAK, %s kullan
+
+Global state YASAK (Y-353 DI)
+
+Test yazmadan önce syntax kontrol
+
+Her kod bloğu sonrası pytest
+
+Başlat
+"DURUM.md'yi okudun mu? B2c'ye başla."
