@@ -1,3 +1,11 @@
+_CS = {
+    "GOOD": 0.0001, "LOW_OI": 0.0001, "HOT": 0.0001, "COLD": 0.0001,
+    "TIGHT": 0.0001, "WIDE": 0.0001, "BIG": 0.0001, "SMALL": 0.0001,
+    "JUNK1": 0.0001, "JUNK2": 0.0001,
+}
+for i in range(30):
+    _CS["SYM%d" % i] = 0.0001
+
 import pytest
 
 from src.data_layer.metrics_fetcher import (
@@ -42,7 +50,7 @@ async def test_filters_low_oi():
         _row("GOOD", hold=1_000_000_000.0),  # 1B contracts × 0.0001 × 100 = 10M oi
         _row("LOW_OI", hold=1_000.0),        # 10k usd
     ])
-    f = BulkMetricsFetcher(rest, FetcherConfig())
+    f = BulkMetricsFetcher(rest, FetcherConfig(), _CS)
     out = await f.fetch_and_rank()
     syms = [s.symbol for s in out]
     assert "GOOD" in syms
@@ -55,7 +63,7 @@ async def test_filters_low_volume():
         _row("HOT", vol=200_000_000.0),
         _row("COLD", vol=10_000_000.0),
     ])
-    f = BulkMetricsFetcher(rest, FetcherConfig())
+    f = BulkMetricsFetcher(rest, FetcherConfig(), _CS)
     out = await f.fetch_and_rank()
     syms = [s.symbol for s in out]
     assert "HOT" in syms
@@ -68,7 +76,7 @@ async def test_filters_wide_spread():
         _row("TIGHT", bid=99.95, ask=100.05),  # ~10 bps
         _row("WIDE", bid=90.0, ask=110.0),     # huge
     ])
-    f = BulkMetricsFetcher(rest, FetcherConfig())
+    f = BulkMetricsFetcher(rest, FetcherConfig(), _CS)
     out = await f.fetch_and_rank()
     syms = [s.symbol for s in out]
     assert "TIGHT" in syms
@@ -81,7 +89,7 @@ async def test_scoring_volume_weight():
         _row("BIG", vol=1_000_000_000.0),
         _row("SMALL", vol=100_000_000.0),
     ])
-    f = BulkMetricsFetcher(rest, FetcherConfig())
+    f = BulkMetricsFetcher(rest, FetcherConfig(), _CS)
     out = await f.fetch_and_rank()
     assert out[0].symbol == "BIG"
 
@@ -89,14 +97,14 @@ async def test_scoring_volume_weight():
 @pytest.mark.asyncio
 async def test_top_n_limit():
     rows = [_row("SYM%d" % i, vol=200_000_000.0 + i) for i in range(30)]
-    f = BulkMetricsFetcher(_FakeRest(rows), FetcherConfig(top_n=5))
+    f = BulkMetricsFetcher(_FakeRest(rows), FetcherConfig(top_n=5), _CS)
     out = await f.fetch_and_rank()
     assert len(out) == 5
 
 
 @pytest.mark.asyncio
 async def test_empty_input():
-    f = BulkMetricsFetcher(_FakeRest([]), FetcherConfig())
+    f = BulkMetricsFetcher(_FakeRest([]), FetcherConfig(), _CS)
     out = await f.fetch_and_rank()
     assert out == []
 
@@ -107,7 +115,7 @@ async def test_all_filtered_returns_empty():
         _row("JUNK1", hold=100.0, vol=100.0),
         _row("JUNK2", hold=200.0, vol=200.0),
     ])
-    f = BulkMetricsFetcher(rest, FetcherConfig())
+    f = BulkMetricsFetcher(rest, FetcherConfig(), _CS)
     out = await f.fetch_and_rank()
     assert out == []
 

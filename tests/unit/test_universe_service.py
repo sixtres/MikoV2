@@ -33,7 +33,11 @@ def _mk_service(rows, always=("BTC_USDT",)):
         max_top=5, max_watch=10, always_include=always,
         min_oi_usd=1_000_000.0,
     ))
-    return UniverseService(rest, scanner, FetcherConfig(top_n=20))
+    cs = {}
+    for r in rows:
+        cs[r["symbol"]] = 0.0001
+    cs["BTC_USDT"] = 0.0001
+    return UniverseService(rest, scanner, FetcherConfig(top_n=20), cs)
 
 
 @pytest.mark.asyncio

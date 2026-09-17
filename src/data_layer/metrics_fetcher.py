@@ -28,8 +28,7 @@ class FetcherConfig:
     top_n: int = 20
     weight_volume: float = 0.4
     weight_oi: float = 0.3
-    weight_funding: float = 0.3
-    contract_size_default: float = 0.0001
+    weight_funding: float = 0.3    
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +43,15 @@ class RankedSymbol:
 
 
 class BulkMetricsFetcher:
-    def __init__(self, rest: "MEXCRestClient", config: FetcherConfig) -> None:
+    def __init__(
+        self,
+        rest: "MEXCRestClient",
+        config: FetcherConfig,
+        contract_sizes: dict[str, float],
+    ) -> None:
         self._rest = rest
         self._cfg = config
+        self._contract_sizes = contract_sizes
 
     @staticmethod
     def _spread_bps(bid: float, ask: float) -> float:
@@ -63,7 +68,10 @@ class BulkMetricsFetcher:
         candidates: list[RankedSymbol] = []
 
         for item in raw:
-            cs = cfg.contract_size_default
+            sym = item["symbol"]
+            cs = self._contract_sizes.get(sym)
+            if cs is None or cs <= 0:
+                continue
             last = item["last_price"]
             hold = item["hold_vol"]
             if last <= 0 or hold <= 0:
@@ -78,7 +86,7 @@ class BulkMetricsFetcher:
             if spread < cfg.min_spread_bps or spread > cfg.max_spread_bps:
                 continue
             candidates.append(RankedSymbol(
-                symbol=item["symbol"],
+                symbol=sym,
                 last_price=last,
                 volume24_usd=vol,
                 oi_usd=oi_usd,

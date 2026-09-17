@@ -24,12 +24,17 @@ from src.data_layer.universe_service import UniverseService
 async def main() -> None:
     async with aiohttp.ClientSession() as session:
         rest = MEXCRestClient(session)
+        print("fetching contract sizes...")
+        contract_sizes = await rest.fetch_all_contract_details()
+        print("contracts:", len(contract_sizes))
+        print()
+
         scanner = UniverseScanner(ScannerConfig(
             max_top=5, max_watch=10,
             always_include=("BTC_USDT",),
             min_oi_usd=5_000_000.0,
         ))
-        svc = UniverseService(rest, scanner, FetcherConfig(top_n=20))
+        svc = UniverseService(rest, scanner, FetcherConfig(top_n=20), contract_sizes)
         result = await svc.scan()
 
         print("=== Top 5 ===")

@@ -188,6 +188,31 @@ class MEXCRestClient:
                 return float(cs)
         raise MEXCRestError("symbol not found in contract detail: %s" % symbol)
 
+    async def fetch_all_contract_details(self) -> dict[str, float]:
+        """
+        Bulk fetch contract_size for ALL symbols in one call.
+
+        Returns {symbol: contract_size} for ~1184 symbols.
+        """
+        path = "/api/v1/contract/detail"
+        payload = await self._get_json(path)
+        data = payload.get("data") or []
+        if not isinstance(data, list):
+            raise MEXCRestError("contract detail not a list")
+        out: dict[str, float] = {}
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            sym = item.get("symbol")
+            cs = item.get("contractSize")
+            if not sym or cs is None:
+                continue
+            try:
+                out[sym] = float(cs)
+            except (TypeError, ValueError):
+                continue
+        return out
+
     async def fetch_ticker(self, symbol: str) -> dict:
         """
         Fetch ticker for a symbol. Includes OI (holdVol).

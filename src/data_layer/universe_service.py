@@ -40,8 +40,9 @@ class UniverseService:
         rest: "MEXCRestClient",
         scanner: UniverseScanner,
         fetcher_config: FetcherConfig,
+        contract_sizes: dict[str, float],
     ) -> None:
-        self._fetcher = BulkMetricsFetcher(rest, fetcher_config)
+        self._fetcher = BulkMetricsFetcher(rest, fetcher_config, contract_sizes)
         self._scanner = scanner
         self._last_result: ScanResult | None = None
 
