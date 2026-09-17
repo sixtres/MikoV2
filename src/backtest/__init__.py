@@ -3,17 +3,28 @@
 
 """
 Backtest package - re-export only.
-
-No instance creation, only re-exports.
-Y-258: fill model R:R
-Y-353: DI
 """
 
 from __future__ import annotations
 
-from .fill_model import FillModel, FillModelConfig
+from .engine import BacktestEngine, BacktestStats
+from .fill_model import FillModel, FillModelConfig, FillResult, FillStatus
+from .replay_transport import (
+    DepthEvent,
+    OHLCVEvent,
+    ReplayTransport,
+    TickerEvent,
+)
 
 __all__ = [
+    "BacktestEngine",
+    "BacktestStats",
+    "DepthEvent",
     "FillModel",
     "FillModelConfig",
+    "FillResult",
+    "FillStatus",
+    "OHLCVEvent",
+    "ReplayTransport",
+    "TickerEvent",
 ]
