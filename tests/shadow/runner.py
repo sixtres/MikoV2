@@ -562,7 +562,23 @@ class ShadowRunner:
 
                 # RISK #2: SIGTERM handler
                 self._install_sigterm()
+                # Data starvation watchdog: shutdown_event tetikle
+                async def ws_watchdog():
+                    while not self._shutdown_event.is_set():
+                        await asyncio.sleep(15)
+                        if self.ws is None:
+                            return
+                        last = getattr(self.ws, "_last_data_mono", 0.0)
+                        now = asyncio.get_event_loop().time()
+                        if last > 0 and now - last > 90.0:
+                            logger.warning(
+                                "WS data starvation %.1fs, triggering shutdown",
+                                now - last,
+                            )
+                            self._shutdown_event.set()
+                            return
 
+                asyncio.create_task(ws_watchdog())
                 start = time.monotonic()
                 last_flush = time.monotonic()
                 try:

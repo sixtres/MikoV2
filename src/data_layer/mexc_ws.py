@@ -47,6 +47,7 @@ class MEXCWSClient:
         dead_timeout_s: float = DEFAULT_DEAD_TIMEOUT_S,
         on_deal: DealCallback | None = None,
     ) -> None:
+        self._last_data_mono: float = 0.0
         self.symbols = symbols
         self.on_depth = on_depth
         self.on_deal = on_deal
@@ -90,6 +91,8 @@ class MEXCWSClient:
             while self._running:
                 msg = await self._ws.receive()
                 self._last_msg_mono = asyncio.get_event_loop().time()
+                if self._last_data_mono == 0.0:
+                    self._last_data_mono = self._last_msg_mono                
                 if msg.type.name == "TEXT":
                     await self._handle_raw(msg.data)
                 elif msg.type.name in ("CLOSE", "CLOSED", "CLOSING"):
@@ -105,6 +108,15 @@ class MEXCWSClient:
             while self._running:
                 await asyncio.sleep(self.ping_interval_s)
                 now = asyncio.get_event_loop().time()
+                # Watchdog: data starvation = dead connection (pong yalan söyler)
+                if self._last_data_mono > 0 and now - self._last_data_mono > 60.0:
+                    logger.warning(
+                        "MEXC data starvation: %.1fs no push.* — forcing shutdown",
+                        now - self._last_data_mono,
+                    )
+                    self._running = False
+                    break
+                # Legacy: total silence watchdog
                 if now - self._last_msg_mono > self.dead_timeout_s:
                     logger.warning("MEXC dead timeout exceeded")
                     break
@@ -126,6 +138,7 @@ class MEXCWSClient:
     async def _handle_message(self, msg: dict) -> None:
         channel = msg.get("channel")
         if channel == "push.depth":
+            self._last_data_mono = asyncio.get_event_loop().time()
             symbol = msg.get("symbol")
             data = msg.get("data")
             if not symbol or not isinstance(data, dict):
@@ -137,6 +150,7 @@ class MEXCWSClient:
             return
 
         if channel == "push.deal":
+            self._last_data_mono = asyncio.get_event_loop().time()
             symbol = msg.get("symbol")
             trades = msg.get("data")
             if not symbol or not isinstance(trades, list):
