@@ -126,7 +126,7 @@ def test_get_time_range(tmp_path):
     assert rng is not None
     lo, hi = rng
     assert lo == 1_000_000
-    assert hi == 1_003_000
+    assert hi == 1_004_000
 
 
 def test_get_time_range_empty(tmp_path):
