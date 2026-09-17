@@ -9,7 +9,6 @@ Filters by liquidity, scores by opportunity, returns top N.
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -21,14 +20,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class FetcherConfig:
-    min_oi_usd: float = 1_000_000.0       # 5M -> 1M
-    min_volume24_usd: float = 10_000_000.0  # 50M -> 10M
-    min_spread_bps: float = 0.3           # 1.0 -> 0.3            
+    min_oi_usd: float = 1_000_000.0
+    min_volume24_usd: float = 10_000_000.0
+    min_spread_bps: float = 0.3
     max_spread_bps: float = 20.0
     top_n: int = 20
     weight_volume: float = 0.4
     weight_oi: float = 0.3
-    weight_funding: float = 0.3    
+    weight_funding: float = 0.3
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +97,6 @@ class BulkMetricsFetcher:
         if not candidates:
             return []
 
-        # normalize for scoring
         max_vol = max(s.volume24_usd for s in candidates) or 1.0
         max_oi = max(s.oi_usd for s in candidates) or 1.0
 
@@ -106,7 +104,6 @@ class BulkMetricsFetcher:
         for s in candidates:
             vol_norm = s.volume24_usd / max_vol
             oi_norm = s.oi_usd / max_oi
-            # funding extreme: abs value, capped at 0.005 (0.5%)
             f_abs = min(abs(s.funding_rate) / 0.005, 1.0)
             score = (
                 cfg.weight_volume * vol_norm
