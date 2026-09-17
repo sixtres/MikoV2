@@ -39,8 +39,9 @@ def _row(sym, price=100.0, bid=99.9, ask=100.1, hold=1_000_000_000.0,
 
 def test_config_defaults():
     c = FetcherConfig()
-    assert c.min_oi_usd == 5_000_000.0
-    assert c.min_volume24_usd == 50_000_000.0
+    assert c.min_oi_usd == 1_000_000.0        # 5M -> 1M
+    assert c.min_volume24_usd == 10_000_000.0 # 50M -> 10M
+    assert c.min_spread_bps == 0.3            # 1.0 -> 0.3
     assert c.top_n == 20
 
 
@@ -61,7 +62,7 @@ async def test_filters_low_oi():
 async def test_filters_low_volume():
     rest = _FakeRest([
         _row("HOT", vol=200_000_000.0),
-        _row("COLD", vol=10_000_000.0),
+        _row("COLD", vol=5_000_000.0),  # 10M -> 5M (min_vol=10M)
     ])
     f = BulkMetricsFetcher(rest, FetcherConfig(), _CS)
     out = await f.fetch_and_rank()

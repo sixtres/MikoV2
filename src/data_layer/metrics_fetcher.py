@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class FetcherConfig:
-    min_oi_usd: float = 5_000_000.0
-    min_volume24_usd: float = 50_000_000.0
-    min_spread_bps: float = 1.0
+    min_oi_usd: float = 1_000_000.0       # 5M -> 1M
+    min_volume24_usd: float = 10_000_000.0  # 50M -> 10M
+    min_spread_bps: float = 0.3           # 1.0 -> 0.3            
     max_spread_bps: float = 20.0
     top_n: int = 20
     weight_volume: float = 0.4
