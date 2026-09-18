@@ -98,18 +98,18 @@ class Strategy:
         has_ote_short = any(s.kind == SignalKind.OTE_SHORT for _, s in recent)
 
         long_ok = (
-            (not cfg.require_sweep or has_sweep_up)
+            (not cfg.require_sweep or has_sweep_down)
             and (not cfg.require_mss or has_mss_up)
             and (not cfg.require_fvg or has_fvg_bull)
             and (not cfg.require_ote or has_ote_long)
         )
         short_ok = (
-            (not cfg.require_sweep or has_sweep_down)
+            (not cfg.require_sweep or has_sweep_up)
             and (not cfg.require_mss or has_mss_down)
             and (not cfg.require_fvg or has_fvg_bear)
             and (not cfg.require_ote or has_ote_short)
         )
-
+        
         out: list[EntrySignal] = []
         contributing = tuple(s.kind.value for _, s in recent)
 

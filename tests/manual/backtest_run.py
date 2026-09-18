@@ -33,9 +33,17 @@ def main() -> None:
     p.add_argument("--db", default="data/mikov2.sqlite")
     p.add_argument("--symbol", default="BTC_USDT")
     p.add_argument("--require-ote", action="store_true")
+    p.add_argument("--no-require-sweep", action="store_true",
+                   help="Disable sweep requirement (default: sweep required)")
+    p.add_argument("--no-require-mss", action="store_true",
+                   help="Disable MSS requirement (default: MSS required)")
+    p.add_argument("--no-require-fvg", action="store_true",
+                   help="Disable FVG requirement (default: FVG required)")
     p.add_argument("--entry-window-ms", type=int, default=15_000)
     p.add_argument("--cooldown-ms", type=int, default=60_000)
     args = p.parse_args()
+
+
 
     db = Path(args.db)
     if not db.exists():
@@ -56,9 +64,9 @@ def main() -> None:
     strategy = Strategy(StrategyConfig(
         entry_window_ms=args.entry_window_ms,
         min_whale_trust=0,
-        require_sweep=True,
-        require_mss=True,
-        require_fvg=True,
+        require_sweep=not args.no_require_sweep,
+        require_mss=not args.no_require_mss,
+        require_fvg=not args.no_require_fvg,
         require_ote=args.require_ote,
         cooldown_ms=args.cooldown_ms,
     ), detector)
