@@ -182,13 +182,48 @@ gerekçeli pozisyon.
 - Asistan cevaplari DURUM.md'ye veya ilgili dökumana isler.
 - Cevaplanmayan soru bir sonraki mesaja tasinir; unutulmaz.
 
-## 6. KOD/DÖKUMAN ÜRETIM KONTROLÜ (BAGLAYICI)
+## 6. DOSYA İSTEME PROTOKOLÜ (BAGLAYICI)
+
+Asistan, mevcut kodu/dokumani incelemek için dosya istediginde
+tam GitHub linkini (base URL + dosya yolu) kullaniciya sunar.
+Kullanici bu linki acar, dosya icerigini copy-paste ile paylasir.
+
+### 6.1 Kural
+
+- Asistan dosya istemeden önce projenin GitHub base URL'ini DURUM.md
+  §0'dan okur (ornek: https://github.com/sixtres/MikoV2).
+- Her dosya icin tam link olusturulur:
+  {base_url}/blob/main/{dosya_yolu}
+- Link mesaj icinde verilir; kullanici tiklar, icerigi kopyalar,
+  asistana gonderir.
+- Asistan dosya icerigini gormeden varsayim yapmaz; interface'i,
+  veri tiplerini ve event formatini dosyadan okur.
+
+### 6.2 Ornek (MikoV2)
+
+Kullanici: "B2c icin mevcut kodlari inceleyelim."
+Asistan: "Su dosyalari paylasir misin:
+- https://github.com/sixtres/MikoV2/blob/main/src/backtest/replay_transport.py
+- https://github.com/sixtres/MikoV2/blob/main/src/backtest/engine.py"
+Kullanici: linkleri acar, icerikleri copy-paste eder.
+
+### 6.3 Kapsam
+
+Bu kural sadece GitHub'da tutulan projeler icin gecerlidir.
+Local-only dosyalar icin kullanici direkt icerigi paylasir;
+link olusturulmaz.
+
+Not: Bu protokol, local'de calisilan kod ile remote'un farkli
+oldugu durumlarda dogruluk garantisi verir (kullanici her zaman
+local'deki guncel kodu paylasir).
+
+## 7. KOD/DÖKUMAN ÜRETIM KONTROLÜ (BAGLAYICI)
 
 Asistan bir kodu veya dökumani kullaniciya vermeden önce kontrol
 yapmak zorundadir. Amaç: format hatalari, eksik degisiklik, yanlis
 atıf ve tutarsizliklarin kullaniciya ulasmasini engellemek.
 
-### 6.1 Kural
+### 7.1 Kural
 
 - Her kod/dökuman verilmeden önce 5 kontrol çalistirilir.
 - Kontrol yapilmadan kod/dökuman verilmez.
@@ -199,7 +234,7 @@ atıf ve tutarsizliklarin kullaniciya ulasmasini engellemek.
 - Kullanici "kontrol etme, direkt ver" dese bile kontrol yapilir;
   kural kullanici tarafindan da geçersiz kilinamaz.
 
-### 6.2 Bes Kontrol
+### 7.2 Bes Kontrol
 
 Kontrol 1 — Format:
 - Dökuman tek 4-backtick blogu içinde mi?
@@ -235,7 +270,7 @@ Kontrol 5 — Tutarlilik:
 - Ayni sayi/sabit baska yerde farkli mi?
 - Proje anayasa/kurallariyla çeliski var mi?
 
-### 6.3 Kontrol Sonucu Formati
+### 7.3 Kontrol Sonucu Formati
 
 Asistan kodu/dökumani vermeden önce su formatta checklist gösterir:
 
@@ -260,7 +295,7 @@ Asistan kodu/dökumani vermeden önce su formatta checklist gösterir:
 
     Sonuç: Tüm kontroller geçti. Dökuman veriliyor.
 
-### 6.4 Kaçirma Durumu
+### 7.4 Kaçirma Durumu
 
 Asistan kontrolü atladıysa (kod/dökuman verildi ama checklist yok):
 - Kullanici fark ettiginde asistan hatayi kabul eder.
@@ -268,7 +303,7 @@ Asistan kontrolü atladıysa (kod/dökuman verildi ama checklist yok):
 - Kod/dökuman geri çekilir, kontrol yapilir, yeniden verilir.
 - Sonraki üretimlerde kontrol sikilasir.
 
-### 6.5 Kapsam
+### 7.5 Kapsam
 
 Bu kontrol her yapilandirilmis çikti için geçerlidir:
 - Kod dosyalari ve moduller
@@ -280,7 +315,7 @@ Bu kontrol her yapilandirilmis çikti için geçerlidir:
 Kisa mesajlar (sohbet, soru-cevap) bu kapsam disidir; sadece
 "dökuman/kod" niteligindeki çiktilar için geçerlidir.
 
-### 6.6 Format Kurallari (Baglayici)
+### 7.6 Format Kurallari (Baglayici)
 
 - Her dökuman tek 4-backtick blogu içinde verilir.
 - 4-backtick içinde 3-backtick KESINLIKLE YASAK.
@@ -289,7 +324,7 @@ Kisa mesajlar (sohbet, soru-cevap) bu kapsam disidir; sadece
 - ASCII diyagram: sadece + - | > v ^ < karakterleri.
 - "Full dökuman ver" -> tek blok, parça parça degil.
 
-## 7. ASISTAN KENDINE NOTLAR
+## 8. ASISTAN KENDINE NOTLAR
 
 Bu protokol uygulanan sohbetlerde yapilan/yapilabilecek hatalar
 (tekrarlanmasin):
@@ -318,7 +353,7 @@ Bu protokol uygulanan sohbetlerde yapilan/yapilabilecek hatalar
 - Protokolü proje bilgisiyle doldurma. Proje-özel her sey DURUM.md'ye
   gider; bu dökuman yöntem olarak sabit kalir.
 
-## 8. ÇALISMA PRENSIPLERI
+## 9. ÇALISMA PRENSIPLERI
 
 - Kağıt-öncelikli tasarim: mimari kararlar önce dökumanda alinir,
   sonra kodlanir.

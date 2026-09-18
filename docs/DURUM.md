@@ -1,5 +1,5 @@
 MikoV2 — DURUM
-Versiyon: v2.1
+Versiyon: v2.2
 Tarih: 2026-09-19
 Durum: Backtest veri toplama VM'de aktif. B2c (Position Simulator)
 hazirlik asamasindayiz. GitHub checkpoint: 7fb8278 (force-push ile
@@ -9,6 +9,7 @@ PO: Eser Göbekli
 Önceki: REV7 (FAZ 6/7/8 kapanis) -> REV9 (dashboard + universe +
 shadow collector + backtest B0.x-B1) -> v2.0 (protokol entegrasyonu)
 -> v2.1 (BAGLAM.txt entegrasyonu ve kaldirilmasi)
+-> v2.2 (arşiv referansi temizligi)
 
 ## 0. ÇALISMA YÖNTEMI
 
@@ -24,29 +25,11 @@ tasarim + test odakli gelistirme.
   (3.11+ syntax YASAK).
 - Gelistirme döngüsü: Local'de (Windows/PS) kodlama ve test (pytest),
   VM'de (eser_gobekli@mikov2-collector-1) calistirma.
+- **GitHub base URL:** https://github.com/sixtres/MikoV2
+  (Dosya isteme protokolü için referans; SOHBET-KAPANIS §6)
 - Devir protokolu: SOHBET-KAPANIS-PROTOKOLU.md (v2.0, projeden
   bagimsiz yöntem dökümani). Devir sirasinda bu dosya (DURUM.md)
   güncellenir; protokol sabit kalir.
-
-### BAGLAYICI KURALLAR (protokole atif)
-
-KURAL 1: Her mesaj sonunda [baglam: ~%NN] gösterilir; %80 esiginde
-yildizli büyük uyari (SOHBET-KAPANIS §4).
-KURAL 2: Karar-sorma formati (Soru -> Baglam -> Seçenekler -> Öneri)
-her ikili sohbette baglayici (SOHBET-KAPANIS §5).
-KURAL 3: Her kod/döküman verilmeden önce 5 kontrol + checklist
-(SOHBET-KAPANIS §6).
-KURAL 4: Git checkpoint stratejisi — güvenilmeyen commit'ler
-force-push ile silinir (SOHBET-KAPANIS §2.3).
-
-### PROJE ANAYASASI (kod kurallari, baglayici)
-
-- Python 3.10 hedef — 3.11+ syntax YASAK (except*, TaskGroup).
-- Global state YASAK — DI zorunlu (Y-353).
-- f-string log YASAK — %s placeholder.
-- "from .." bosluklu zorunlu — syntax hatasi önleme.
-- Test yazmadan önce syntax kontrol; her kod blogundan sonra pytest.
-- Blind kabul YASAK; her satir sorgulanabilir.
 
 ## 1. TAMAMLANAN FAZLAR
 
@@ -245,15 +228,11 @@ Kod kurallari:
 - docs/SOHBET-KAPANIS-PROTOKOLU.md — v2.0, projeden bagimsiz yöntem.
 - docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kurallari (referans).
 - docs/MikoV2-Proje-Tum-Moduller-REV5.md — modül pseudo (referans).
-- docs/rev9/DURUM.md — REV9 arsivi (bu dosyanin öncülü).
-
-Not: docs/BAGLAM.txt v2.1'de kaldirildi; içerigi bu dosyaya
-entegre edildi.
 
 ## 13. YENI SOHBET NASIL BASLAR
 
 Verilecek dosyalar:
-- DURUM.md (bu, v2.1)
+- DURUM.md (bu, v2.2)
 - SOHBET-KAPANIS-PROTOKOLU.md (v2.0)
 - MikoV2-AnaYasa-REV5.md
 - MikoV2-Proje-Tum-Moduller-REV5.md
@@ -272,23 +251,5 @@ FROZEN YOK.
 Her satir sorgulanabilir.
 Yeni YAMA 369+ açik.
 Blind kabul YASAK.
-
-## 15. VERSIYON
-
-v1.0 (REV9, 2026-09-17): Orijinal REV9 durum dökümani. FAZ 0-9
-kapandi, universe scanner + shadow collector + backtest B0.x-B1
-tamamlandi. B2c siradaki.
-v2.0 (2026-09-19): Protokol entegrasyonu. SOHBET-KAPANIS v2.0
-(projeden bagimsiz) sisteme eklendi. Git checkpoint karari ve
-güvenilmeyen B2c/B2d deneme commit'lerinin (f714665 -> 6199ae2)
-force-push ile temizlenmesi (checkpoint 7fb8278) kaydedildi.
-Baglayici kurallar ve proje anayasasi bölümü eklendi. B2c'nin
-sifirdan temiz yazilacagi not edildi.
-v2.1 (2026-09-19): BAGLAM.txt entegrasyonu ve kaldirilmasi.
-docs/BAGLAM.txt içerigi bu dosyaya tasinir; dosya referanslardan
-(§12, §13) çikarilir. Açilis mesaji BAGLAM.txt'deki "Başlat"
-satirina uyumlu hale getirildi (kisa ve uzun alternatif).
-§9 VERSIYON SOHBET-KAPANIS-PROTOKOLU.md'den kaldirildi
-(kullanici karari; gereksiz bilgi dosya içinden temizlendi).
 
 SON
