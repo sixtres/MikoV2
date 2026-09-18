@@ -88,8 +88,8 @@ class Strategy:
         if not recent:
             return []
 
-        has_sweep_up = any(s.kind == SignalKind.SWEEP_DOWN for _, s in recent)
-        has_sweep_down = any(s.kind == SignalKind.SWEEP_UP for _, s in recent)
+        has_sweep_up = any(s.kind == SignalKind.SWEEP_UP for _, s in recent)
+        has_sweep_down = any(s.kind == SignalKind.SWEEP_DOWN for _, s in recent)
         has_mss_up = any(s.kind == SignalKind.MSS_UP for _, s in recent)
         has_mss_down = any(s.kind == SignalKind.MSS_DOWN for _, s in recent)
         has_fvg_bull = any(s.kind == SignalKind.FVG_BULLISH for _, s in recent)
