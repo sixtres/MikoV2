@@ -221,7 +221,7 @@ Sigorta: 3-4 hafta paper trading -> gerçek para.
 11. KİLİTLİ KARARLAR (Kümülatif)
 Git/checkpoint:
 Güvenilmeyen commit'ler local'de reset, remote'a force-push ile silinir. Önceki checkpoint: 7fb827848aee38897fcea9616d4ea898c294089a (REV9 DURUM + BAĞLAM, 2026-09-17).
-Bu oturum checkpoint'i: TODO — push sonrası hash eklenecek (içerik: B2c position_sim.py + 16 test + backtest_run.py wiring + SORU G/H + async_telemetry docstring + test polling fix + DURUM v2.8; 733 test PASS ile doğrulandı).
+Bu oturum checkpoint'i: <COMMIT_HASH> (B2c kapanış; içerik: position_sim.py + 16 test + backtest_run.py wiring + SORU G/H + async_telemetry docstring + test polling fix + DURUM v2.8; 733 test PASS ile doğrulandı).
 Protokol = yöntem, DURUM = içerik. Devir sırasında sadece bu dosya güncellenir; SOHBET-KAPANIS-PROTOKOLU.md sabit kalır.
 
 Mimari:
