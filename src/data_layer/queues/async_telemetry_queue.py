@@ -16,7 +16,14 @@ blocking the event loop.
 
 threaded_bridge=False enables synchronous forwarding (unit tests only):
 put_nowait pushes directly into mp_queue on the caller's thread, no daemon
-thread, no timing races.
+bridge thread.
+
+CAVEAT: regardless of threaded_bridge, mp.Queue itself owns an internal
+feeder thread. put_nowait returns after enqueueing to mp.Queue's buffer,
+NOT after data reaches the pipe. get_nowait reads from the pipe only and
+may therefore return None immediately after a successful put_nowait.
+Consumers MUST poll (or sleep briefly) rather than assume synchronous
+put→get ordering.
 """
 
 from __future__ import annotations
@@ -35,6 +42,13 @@ class AsyncTelemetryQueue:
     Y-276: telemetry DROP_OLDEST 1000, put_nowait DROP
     Y-329: mp.Queue bridge for process-boundary telemetry
     Y-353: instance via DI
+
+    Async semantics (mp.Queue):
+      - put_nowait: enqueues to mp.Queue buffer, returns immediately.
+      - get_nowait: reads pipe; may return None even when put_nowait
+        has just succeeded (feeder thread has not flushed yet).
+      - Producers must not assume synchronous put→get ordering.
+        Consumers poll or wait between get_nowait calls.
     """
 
     def __init__(

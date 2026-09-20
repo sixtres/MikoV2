@@ -123,10 +123,14 @@ def test_drop_oldest_preserves_newest():
         q.put_nowait(3)
         q.put_nowait(4)
         items = []
-        while True:
+        # mp.Queue feeder thread async yazar; pipe'a düşene kadar
+        # get_nowait boş dönebilir. Kısa deadline ile poll.
+        deadline = time.monotonic() + 0.5
+        while len(items) < 2 and time.monotonic() < deadline:
             it = q.get_nowait()
             if it is None:
-                break
+                time.sleep(0.005)
+                continue
             items.append(it)
         assert items == [3, 4]
     finally:

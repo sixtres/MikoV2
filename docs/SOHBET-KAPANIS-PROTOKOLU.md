@@ -473,8 +473,8 @@ azaltmak; her satirin sorgulanabilirligini desteklemek.
 Her degisiklik tek bir "Degisiklik N" basligi altinda sunulur:
 Tam dosya yolu (proje root'tan itibaren, örn: src/backtest/engine.py)
 Degisiklik lokasyonu (satir araligi veya fonksiyon adi)
-"Eski hali:" basligi + 4-space indentation kod blogu
-"Yeni hali:" basligi + 4-space indentation kod blogu
+"Eski hali:" başlığı + 4-backtick indentation kod bloğu
+"Yeni hali:" basligi + 4-backtick indentation kod blogu
 "Gerekçe:" tek cümle (ne degisti, neden, hangi YAMA/karar ile uyumlu)
 7.7.2 Kurallar
 Dosya yolu zorunlu. Sadece dosya adi verilmesi YASAK.
@@ -490,8 +490,8 @@ Ayni dosyada birden çok degisiklik varsa, her degisiklik ayri
 "Degisiklik N" blogu; dosya yolu her blokta tekrarlanir.
 Degisiklik farkli dosyalarda ise, her dosya için ayri blok;
 dosyalar mantiksal sirada (bagimlilik yönünde).
-Kod bloklari 4-space indentation ile verilir. Iç içe 3-backtick
-YASAK (§7.6 ile tutarli).
+Kod parçaları AYRI 4-backtick blokları içinde verilir. 
+İç içe 3-backtick ve 4-backtick YASAK (§7.6 ile tutarlı).
 Gerekçe, proje dökümanlarindaki (DURUM.md, AnaYasa) ilgili YAMA
 veya karar numarasina atif yapmali (varsa). Canli belge
 atiflarinda versiyon numarasi yazilmaz (§7.2 Kontrol 3).
@@ -504,10 +504,10 @@ Yeni hali:
     def foo(self, offset: int = 0) -> int:
         return self.x + offset + 1
 Gerekçe: foo'ya offset parametresi eklendi, default 0 (geriye uyumlu).
-Format notu: "Değişiklik N:", "Eski hali:", "Yeni hali:", "Gerekçe:"
-basliklari düz metin olarak verilir. Kod bloklari 4-space
-indentation ile verilir; başlıklar kod blogu içine alinmaz
-(§7.6).
+Format notu: "Değişiklik N:", "Eski hali:", "Yeni hali:", 
+  "Gerekçe:" başlıkları düz metin olarak verilir; kod bloğuna alınmaz. 
+  "Eski hali" ve "Yeni hali" kod parçaları AYRI 4-backtick blokları 
+  içinde verilir; 4-space indentation kullanılmaz (§7.6 ile tutarlı).
 7.7.4 Kapsam
 Bu sablon sadece mevcut dosyalarda degisiklik önerileri için
 geçerlidir. Yeni dosya iskeletleri ve tam dosya isteklerinde
