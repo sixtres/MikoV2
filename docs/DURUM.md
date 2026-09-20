@@ -1,10 +1,10 @@
 MikoV2 — DURUM
-Versiyon: v2.8
+Versiyon: v2.9
 Tarih: 2026-09-20
-Durum: B2c (Position Simulator) kapandı. 44 trade / win_rate %20.45 / avg_R -0.3761 / MDD %20.08 / total_return -%17.98. 733 test PASS. B2d (Backtest runner raporlama) sıradaki.
+Durum: B2d kapandı (750 test PASS). reporting.py (Sharpe, PF, expectancy, equity curve JSON+CSV) + --config-a/b + --equity-csv + genişletilmiş --report şeması. §6.1/§6.2 B2d'de uygulanmadı; B2e öncesi/sırasında ayrı commit olarak ele alınacak. Sıradaki: B2e (multi-symbol + walk-forward).
 Amaç: Yeni sohbete başlarken bağlamı hızlıca aktarmak.
 PO: Eser Göbekli
-Önceki: REV7 (FAZ 6/7/8 kapanış) → REV9 (dashboard + universe + shadow collector + backtest B0.x-B1) → v2.0 (protokol entegrasyonu) → v2.1 (BAGLAM.txt entegrasyonu) → v2.2 (arşiv referansı temizliği) → v2.3 (B1/B2a/B2b doğrulama + DB transfer) → v2.4 (B2c öncesi analiz + SWEEP yön fix) → v2.5 (protokol entegrasyonu) → v2.6 (SSOT temizliği) → v2.7 (B2c başlangıç kriterleri kilitlendi) → v2.8 (B2c kapanış + SORU G/H kilitli karar + async telemetry notu)
+Önceki: REV7 (FAZ 6/7/8 kapanış) → REV9 (dashboard + universe + shadow collector + backtest B0.x-B1) → v2.0 (protokol entegrasyonu) → v2.1 (BAGLAM.txt entegrasyonu) → v2.2 (arşiv referansı temizliği) → v2.3 (B1/B2a/B2b doğrulama + DB transfer) → v2.4 (B2c öncesi analiz + SWEEP yön fix) → v2.5 (protokol entegrasyonu) → v2.6 (SSOT temizliği) → v2.7 (B2c başlangıç kriterleri kilitlendi) → v2.8 (B2c kapanış + SORU G/H kilitli karar + async telemetry notu) → v2.9 (B2d kapanış: reporting.py + --config-a/b + --equity-csv + genişletilmiş --report; 750 test PASS)
 
 0. ÇALIŞMA YÖNTEMİ
 MikoV2 — MEXC Futures (vadeli) kripto trading botu. Kağıt-öncelikli tasarım + test odaklı geliştirme.
@@ -41,12 +41,13 @@ Not: transfer.sh, 0x0.st kapalı/kısıtlı (2026-09-19 itibariyle).
 | FAZ 8|Shadow (live MEXC)|Kapandı|
 | FAZ 9|Dashboard + eksik modüller|Kapandı|
 | B2c|Position simulator + PnL (16 test)|Kapandı|
+| B2d|Backtest raporlama (17 test)|Kapandı|
 
 2. TEST DURUMU
-Toplam: 733 test PASS (unit 413 + integration 100 + chaos 61 + backtest 159 = 733).
+Toplam: 750 test PASS (unit 430 + integration 100 + chaos 61 + backtest 159 = 750). (B2d: 17 yeni test.)
 Komut: pytest tests/ -q --tb=no
-Yakalanan kritik bug'lar: WS dead silent (pong data maskesi), mp.Queue blocking event loop, DROP_OLDEST -> DROP_NEWEST race, 429 circuit breaker eksikliği, SWEEP yön mapping tersliği (Bkz §7), SORU G/H slippage/SL floor (B2c, Bkz §8).
-Not: test_drop_oldest_preserves_newest full-suite yükü altında mp.Queue feeder timing kaynaklı tekil/transient FAIL üretebildi; izole koşuda (12/12) ve son full koşuda (733 PASS) temiz. Test, polling + 0.5s deadline ile düzeltildi (Bkz §6.3 notu). İzlenmeye devam.
+Yakalanan kritik bug'lar: WS dead silent (pong data maskesi), mp.Queue blocking event loop, DROP_OLDEST -> DROP_NEWEST race, 429 circuit breaker eksikliği, SWEEP yön mapping tersliği (Bkz §7), SORU G/H slippage/SL floor (B2c, Bkz §7).
+Not: test_drop_oldest_preserves_newest full-suite yükü altında mp.Queue feeder timing kaynaklı tekil/transient FAIL üretebildi; izole koşuda (12/12) ve son full koşuda (750 PASS) temiz. Test, polling + 0.5s deadline ile düzeltildi (Bkz §6.3 notu). İzlenmeye devam.
 
 3. RUNTIME — VM'DE AKTİF OLAN
 Shadow collector (systemctl status miko-collector):
@@ -75,7 +76,8 @@ Dashboard: http://<VM_IP>:8090/ (aiohttp.web, 7 endpoint, Chart.js)
 | src/backtest/signal_detector.py|SWEEP/MSS/FVG/OTE tespiti (5s)|
 | src/backtest/strategy.py|Sinyalleri entry kararına dönüştürür|
 | src/backtest/position_sim.py|B2c — entry/TP/SL simülasyon + PnL|
-| tests/manual/backtest_run.py|Backtest CLI runner (CLI override: --no-require-sweep/-mss/-fvg; B2c: --report, --include-funding)|
+| src/backtest/reporting.py|B2d — genişletilmiş rapor (Sharpe, PF, expectancy, equity curve)|
+| tests/manual/backtest_run.py|Backtest CLI runner (CLI override: --no-require-sweep/-mss/-fvg; B2c: --report, --include-funding; B2d: --config-a/b, --equity-csv)|
 
 5. UNIVERSE SCANNER KARARI
 Sonuç: 1176 sembol -> 3 aşamalı filtre -> Top20 (operasyonel limit; mimari üst sınır 30 coin için Bkz §11).
@@ -93,7 +95,7 @@ Karar: Skorlamada aşırı funding CEZA almalı:
         f_score = -1.0
     else:
         f_score = f_abs / 0.005
-Durum: Karar alındı, kod FAZ B2c'de güncellenecek.
+Durum: Karar alındı, B2c'de uygulanmadı, B2d'de uygulanmadı. Sıradaki iş B2e; bu fix B2e öncesi/sırasında ayrı commit olarak ele alınacak (PO kararı bekliyor; önceki SORU A=(B) "B2d sonrası" revize edildi).
 
 6.2 Emtia token'ları universe'e sızıyor
 Sorun: XAUT_USDT (Tether Gold), SILVER_USDT, UKOIL_USDT, USOIL_USDT, SPCXSTOCK_USDT gibi semboller kripto değil — tokenlaştırılmış emtia/hisse. Whale-radar mantığı bunlarda çalışmaz.
@@ -104,12 +106,12 @@ Karar: Exclude listesi eklenecek:
         "UKOIL_USDT", "USOIL_USDT",
         "SPCXSTOCK_USDT",
     }
-Durum: Karar alındı, kod FAZ B2c'de güncellenecek.
+Durum: Karar alındı, B2c'de uygulanmadı, B2d'de uygulanmadı. Sıradaki iş B2e; bu fix B2e öncesi/sırasında ayrı commit olarak ele alınacak (PO kararı bekliyor; önceki SORU A=(B) "B2d sonrası" revize edildi).
 
 6.3 async_telemetry_queue _bridge_loop DROP_NEWEST sapması
 Sorun: threaded_bridge=True yolunda mp_queue.put queue.Full dönerse, item deque(maxlen) başına appendleft edilirken deque sağdan (en yeni) eleman tahliye eder. DROP_OLDEST semantiği dar bir yarış penceresinde DROP_NEWEST davranışına sapar.
 Etki alanı: Sadece threaded_bridge=True (production default). Testler threaded_bridge=False kullandığı için bu yol test kapsamı dışı.
-Karar: FAZ sonrası — B2c kapsamı dışı, ayrı commit.
+Karar: FAZ sonrası — B2c/B2d kapsamı dışı, ayrı commit.
 Doğrulama: KOD İNCELEME (2026-09-20).
 Durum: Not edildi, FAZ sonrasına bırakıldı.
 
@@ -120,8 +122,8 @@ Durum: Not edildi, FAZ sonrasına bırakıldı.
 | B2a — Signal detector|Doğrulandı (8 sinyal tipi)|
 | B2b — Strategy adapter|Doğrulandı (SWEEP yön bug'ı fix'lendi, test 10/10; semantik Bkz §11)|
 | B2c — Position simulator + PnL|Kapandı (16 test, SORU G/H sonrası 44 trade)|
-| B2d — Backtest runner + rapor|Kısmi: CLI override + --report + --include-funding mevcut; gelişmiş raporlama sıradaki|
-| B2e — Multi-symbol backtest|Bekliyor|
+| B2d — Backtest runner + rapor|Kapandı (17 test; reporting.py + --config-a/b + --equity-csv + genişletilmiş --report)|
+| B2e — Multi-symbol backtest + walk-forward|Sıradaki|
 
 Baz test sonuçları (2026-09-19, BTC_USDT, 97.8 saat):
 Events: 169,205
@@ -170,30 +172,41 @@ B2c SORU G/H (B2c sırasında kilitlenen ek kararlar):
 SORU G: (C) min_sl_distance_pct=0.002 floor — ATR 5s zaman diliminde çok küçük olduğu için (BTC'de ~5.84 USD, SL mesafesi 2.92 USD) fill slippage > SL mesafesi oluyordu; SL floor ile alt sınır konuldu. AnaYasa kilitli kararı (sl_buffer_atr=0.5) revize edilmez; alt sınır üstüne katman eklenir.
 SORU H: (A) entry_slippage_bps=2.0 — fill kayması bps tabanlı; AnaYasa entry_guard 0.25% bir REDDETME eşiğidir (limit emir iptal), fill kayması değildir. Önceki kod entry_guard_pct=0.0025'i slippage olarak kullanıyordu (bug), düzeltildi.
 
-8. B2d — SIRADAKİ İŞ DETAYI
+B2d SONUÇLARI (2026-09-20, kilitli):
+SORU A: (B) §6.1/§6.2 B2d'de uygulanmadı; B2e öncesi/sırasında ayrı commit (revize; PO kararı bekliyor).
+SORU B: (A) Çoklu config karşılaştırma --config-a / --config-b (flat JSON override); tek --report JSON'unda config_a + config_b + comparison blokları.
+SORU C: (B) Equity curve JSON (rapor içinde) + CSV (--equity-csv); PNG yok.
+Yeni dosya: src/backtest/reporting.py
+  - compute_metrics(trades, initial_equity) → ExtendedMetrics (sharpe_annualized, profit_factor, expectancy_r, avg_holding_sec, max_consecutive_losses)
+  - build_equity_curve(trades, initial_equity) → list[EquityPoint]
+  - write_equity_csv(path, curve)
+Yeni test dosyası: tests/unit/test_backtest_reporting.py (17 test)
+Genişletilmiş --report şeması (tek config):
+  { config{strategy,sim}, summary, metrics, equity_curve, engine, signal_counts, trades }
+Çoklu config:
+  { config_a{...}, config_b{...}, comparison{delta_*} }
+VARSAYIM (PO teyidi bekleniyor):
+  - Sharpe yıllıklandırma: trades_per_year = n / span_years, risk_free_rate=0.0
+  - profit_factor tanımsız (kayıp yok) → null (JSON uyumlu; Infinity yazılmaz)
+  - Config override flat JSON: StrategyConfig ve PositionSimConfig alan adları; bilinmeyen alan → hata (SystemExit)
 
-Kapsam: Backtest runner CLI genişletme + gelişmiş raporlama.
-Not: --report trades.json ve --include-funding bayrakları B2c sırasında eklendi.
-Kalan iş: rapor alanları genişletme + çoklu koşu karşılaştırma.
+8. B2e — SIRADAKİ İŞ DETAYI
 
-Dosyalar:
-tests/manual/backtest_run.py — mevcut (--report, --include-funding var).
-src/backtest/reporting.py — YENİ: rapor hesaplayıcı (Sharpe, profit factor, expectancy, equity curve).
+Kapsam: Multi-symbol backtest (Top20) + walk-forward (3 ay train / 1 ay test rolling).
+Ön koşul: §6.1/§6.2 fix'lerinin B2e öncesi/sırasında ayrı commit olarak kapatılması (PO kararı bekliyor).
 
-Girdi config (B2c'den miras): --entry-window-ms 300000, --cooldown-ms 60000 (üç kapı True default).
+B2e KAPSAMI:
+- Multi-symbol: Top20 sembol üzerinde aynı anda backtest.
+- Walk-forward: 3 ay train / 1 ay test rolling.
+- Config: B2c'den miras (entry_window_ms=300000, cooldown_ms=60000, üç kapı True) baz alınır; varyantlar B2e içinde denenir.
+- Reuse: ReplayTransport, BacktestEngine, SignalDetector, Strategy, PositionSimulator, reporting.py.
+- Rapor: reporting.py metrikleri sembol başına + toplam + karşılaştırma.
 
-B2d KAPSAMI:
-- Trade listesinden türev metrikler: Sharpe (yıllık), profit factor, expectancy (R), ortalama tutma süresi, ardışık kayıp serisi.
-- Equity curve (ts_ms → equity) JSON + opsiyonel PNG/CSV.
-- Çoklu config karşılaştırma: aynı DB üzerinde iki StrategyConfig'i tek koşuda çalıştırıp tek raporda karşılaştırma.
-- --report JSON schema genişletme: mevcut summary + yeni metrics + equity_curve.
+B2e DIŞI (B2e sonrası planlanacak):
+- Strateji parametre optimizasyonu (grid/random search vb.) — B2e sonrası ayrı faz.
+- Canlıya geçiş (B3, Bkz §10).
 
-B2d DIŞI (B2e'ye bırakılan):
-- Multi-symbol backtest (Top20).
-- Walk-forward (3 ay train / 1 ay test rolling).
-- Strateji parametre optimizasyonu.
-
-Uygulama tasarımı (devralınan, B2c'den):
+Uygulama tasarımı (devralınan, B2c/B2d'den):
 - Per-symbol limit 1 pozisyon; global concurrent TEST=3, PROD=2.
 - TP/SL exit: 5s OHLCV high/low; çakışma çözümü SORU D (SL önce).
 - Fee: taker 0.0002, maker 0.0.
@@ -202,14 +215,12 @@ Uygulama tasarımı (devralınan, B2c'den):
 - Funding: opsiyonel (SORU E).
 
 9. SIRADAKİ FAZLAR
-B2d (öncelik): Backtest runner raporlama genişletme (Bkz §8).
-Örnek kullanım (mevcut):
-    python -m tests.manual.backtest_run --db data/mikov2.sqlite --symbol BTC_USDT --entry-window-ms 300000 --cooldown-ms 60000 --report b2c_trades.json
-Yeni eklenecek: --report genişletilmiş şema (Sharpe, profit factor, equity_curve), çoklu config karşılaştırma.
-B2e: Multi-symbol backtest + walk-forward.
-Tüm Top20 sembolde aynı anda çalış.
-3 ay train / 1 ay test rolling.
-Kapsam dışı (B2e): strateji parametre optimizasyonu — karar için B2d sonrası planlanacak.
+B2e (sıradaki): Multi-symbol backtest + walk-forward (Bkz §8).
+Örnek kullanım (mevcut CLI):
+    python -m tests.manual.backtest_run --db data/mikov2.sqlite --symbol BTC_USDT --entry-window-ms 300000 --cooldown-ms 60000 --report b2d_single.json --equity-csv b2d_single_eq.csv
+Çoklu config:
+    python -m tests.manual.backtest_run --db data/mikov2.sqlite --symbol BTC_USDT --config-a '{"entry_window_ms":300000}' --config-b '{"entry_window_ms":15000}' --report b2d_cmp.json
+B2e sonrası: strateji parametre optimizasyonu — B2e sonuçlarına göre planlanacak.
 
 10. PROD İÇİN SONRAKİ ADIMLAR (B3)
 Universe scanner'ı shadow runner'a bağla (otomatik Top5 rotasyon).
@@ -221,8 +232,11 @@ Sigorta: 3-4 hafta paper trading -> gerçek para.
 11. KİLİTLİ KARARLAR (Kümülatif)
 Git/checkpoint:
 Güvenilmeyen commit'ler local'de reset, remote'a force-push ile silinir. Önceki checkpoint: 7fb827848aee38897fcea9616d4ea898c294089a (REV9 DURUM + BAĞLAM, 2026-09-17).
-Bu oturum checkpoint'i: <COMMIT_HASH> (B2c kapanış; içerik: position_sim.py + 16 test + backtest_run.py wiring + SORU G/H + async_telemetry docstring + test polling fix + DURUM v2.8; 733 test PASS ile doğrulandı).
+Bu oturum checkpoint'i: <COMMIT_HASH> (B2d kapanış; reporting.py + backtest_run.py wiring + test_backtest_reporting.py; 750 test PASS ile doğrulandı).
 Protokol = yöntem, DURUM = içerik. Devir sırasında sadece bu dosya güncellenir; SOHBET-KAPANIS-PROTOKOLU.md sabit kalır.
+B2d çoklu config: --config-a / --config-b (flat JSON override); tek --report JSON'unda config_a + config_b + comparison (SORU B: (A)).
+B2d equity curve: JSON + CSV; PNG yok (SORU C: (B)).
+§6.1 funding ceza + §6.2 emtia exclude: B2d'de uygulanmadı; B2e öncesi/sırasında ayrı commit (SORU A: (B) revize; PO kararı bekliyor).
 
 Mimari:
 Mimari 30 coin limit + Top20 operasyonel limit — bilinçli trade-off (100 coin için mimari değişiklik gerek; Top20 seçimi için Bkz §5).
@@ -241,6 +255,9 @@ B2c funding: opsiyonel bayrak, varsayılan kapalı (Bkz §7 SORU E: (C)).
 B2c min SL floor: min_sl_distance_pct = 0.002×entry — SL mesafesi ATR tabanlı hesaptan sonra floor uygulanır (Bkz §7 SORU G: (C)).
 B2c fill slippage: entry_slippage_bps = 2.0 — fill kayması bps tabanlı; AnaYasa entry_guard 0.25% reddetme eşiğidir, fill kayması değildir (Bkz §7 SORU H: (A)).
 B2c rapor: --report JSON (summary + engine + signal_counts + trades). Alanlar: initial_equity, final_equity, total_trades, win_rate, avg_r_multiple, max_drawdown_pct, total_return_pct.
+B2d rapor şeması: { config{strategy,sim}, summary, metrics, equity_curve, engine, signal_counts, trades } (tek config); { config_a, config_b, comparison } (çoklu config).
+B2d metrikleri: sharpe_annualized, profit_factor (kayıpsız → null), expectancy_r, avg_holding_sec, max_consecutive_losses.
+B2d equity curve: JSON (raporda) + CSV (--equity-csv); çoklu config'te <stem>.config_a.csv / <stem>.config_b.csv.
 SWEEP semantiği: LONG <- SWEEP_DOWN, SHORT <- SWEEP_UP (stop-hunt reversal; wick_ratio 0.6 = rejection). Testler bu semantiği belgeler.
 
 Kod kuralları: Bkz AnaYasa REV5 §0.
@@ -254,6 +271,8 @@ docs/DURUM.md — bu dosya (proje içeriği, devir noktası).
 docs/SOHBET-KAPANIS-PROTOKOLU.md — projeden bağımsız yöntem dökümanı.
 docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kuralları (referans).
 docs/MikoV2-Proje-Tum-Moduller-REV5.md — modül pseudo (referans).
+src/backtest/reporting.py — B2d genişletilmiş raporlama (Sharpe, PF, expectancy, equity curve).
+tests/unit/test_backtest_reporting.py — B2d raporlama unit testleri (17 test).
 
 13. YENİ SOHBET NASIL BAŞLAR
 Verilecek dosyalar:
@@ -262,7 +281,7 @@ SOHBET-KAPANIS-PROTOKOLU.md
 MikoV2-AnaYasa-REV5.md
 MikoV2-Proje-Tum-Moduller-REV5.md
 Açılış mesajı:
-"DURUM.md'yi okudun mu? B2d'ye başla: §8 tasarıma göre backtest raporlama genişletmesini yap (Sharpe, profit factor, expectancy, equity curve). Mevcut --report JSON şemasını genişlet. Yeni dosya: src/backtest/reporting.py. Testler 733 PASS."
+"DURUM.md'yi okudun mu? B2e'ye başla: §8 tasarıma göre multi-symbol backtest + walk-forward yap. Ön koşul: §6.1/§6.2 fix'leri (B2e öncesi/sırasında ayrı commit). Reuse: ReplayTransport, BacktestEngine, SignalDetector, Strategy, PositionSimulator, reporting.py. Testler 750 PASS."
 
 14. UNFROZEN BEYANI
 FROZEN YOK.
@@ -281,5 +300,6 @@ v2.5 (2026-09-20): Protokol entegrasyonu (SSOT, teslim modları, bağlam takibi,
 v2.6 (2026-09-20): SSOT temizliği, versiyon atıf yasağı düzeltmesi, test hesabı ve checkpoint placeholder fix, protokol v3.2 ile uyum.
 v2.7 (2026-09-20): B2c başlangıç kriterleri netleştirildi. §8'e 6 kilitli karar işlendi (SORU A-F): TP/SL hesabı (0.5×ATR SL, 2R TP), position sizing (risk-based PROD=0.006/TEST=0.008), entry price (signal bar close + slippage), TP/SL çakışma (SL önce konservatif), funding (opsiyonel bayrak --include-funding), multi-symbol kapsamı (tasarım destekler, test tek-sembol). §11 kilitli kararlara ilgili maddeler eklendi. B2d CLI planı --include-funding ile güncellendi.
 v2.8 (2026-09-20): B2c kapandı. src/backtest/position_sim.py + 16 test eklendi. SORU G (min_sl_distance_pct=0.002) + SORU H (entry_slippage_bps=2.0) B2c sırasında tespit edilen slippage/SL floor bug'ları için kilitlendi. Gerçek DB koşusu (BTC_USDT, 97.8h): 44 trade, win_rate %20.45, avg_R -0.3761, MDD %20.08, total_return -%17.98 — bu örneklemde strateji kârlı değil (breakeven %33.3 altı). 733 test PASS. async_telemetry _bridge_loop DROP_NEWEST sapması §6.3'e eklendi (FAZ sonrası, B2c kapsamı dışı). async_telemetry testi polling + 0.5s deadline ile düzeltildi. §8 B2d detayına geçti.
+v2.9 (2026-09-20): B2d kapandı. src/backtest/reporting.py + tests/unit/test_backtest_reporting.py (17 test) + backtest_run.py genişletildi (--config-a/--config-b flat JSON override, --equity-csv, genişletilmiş --report: config + metrics + equity_curve). SORU A: (B) §6.1/§6.2 B2d sonrası ayrı commit — PO B2e'ye geçiyor, fix'ler B2e öncesi/sırasında ele alınacak (revize). SORU B: (A) tek JSON'da config_a + config_b + comparison. SORU C: (B) equity curve JSON+CSV; PNG yok. 750 test PASS. §9 sıradaki faz B2e. §13 açılış mesajı B2e'ye güncellendi.
 
 SON
