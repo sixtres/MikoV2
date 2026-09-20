@@ -1,0 +1,357 @@
+YAZILIM PROJESI — SOHBET KAPANIS VE CALISMA PROTOKOLU
+Versiyon: v3.2
+Tarih: 2026-09-20
+Amaç: Uzun yazılım sohbetlerinde baglam kaybi yasandiginda temiz
+devir yapabilmek; ajan ile birlikte çalisirken dökuman üretimi ve
+kod üretimi disiplinini saglamak; soru sorma, öneri doğrulama,
+baglam takibi, atif ve SSOT uyumunu garanti altina almak.
+Kapsam: Bu protokol yazilim projeleri için tasarlanmistir.
+Farkli dil/framework için sablon alinir; test/lint/derleme komutlari
+ve dil-spesifik yasaklar proje anayasa dosyasindan okunur. Proje-özel
+bilgiler bu dökumanin kapsami disindadir; tek kaynaklari projenin
+DURUM dosyasidir. Bu protokol projeden bagimsizdir.
+Uygulama katmanlari: Her bölüm basligindaki etiket uygulama
+seviyesini gösterir.
+BAGLAYICI = her zaman uygulanir.
+KOŞULLU = bölümde belirtilen durumlarda uygulanir.
+TAVSIYE = önerilir, zorunlu degildir.
+TEMEL AYRIM (BAGLAYICI)
+Protokol = yöntem. DURUM.md = içerik.
+Bu dökuman NASIL çalisilacagini tanimlar.
+Projenin DURUM dosyasi NE yapildigini tanimlar.
+Devir sirasinda sadece DURUM.md güncellenir; bu protokol sabittir.
+Proje-özel bir kural bu protokole yazilmaz; proje anayasa/kural
+dosyasina yazilir.
+0.5 BİLGİ SAHİPLİĞİ — SSOT (BAGLAYICI)
+Her bilgi TEK bölümde yasar; diger bölümler sahibine ATIF yapar.
+Ayni bilgi iki yerde yaziliysa HATADIR (§7.2 Kontrol 5).
+Yeni kural eklerken asistan önce sorar: "Bu bilgi zaten baska
+bölümde var mi?" Varsa kopya yazmaz, atif yapar.
+Atif formati: §X.Y. Canli belge atiflarinda versiyon numarasi
+YASAK (§7.2 Kontrol 3).
+0.5.2 Bilgi Sahipliği Tablosu
+| Bilgi                          | Sahip Bölüm      |
+| ------------------------------ | ---------------- |
+| Temel ayrim (yöntem/içerik)    | TEMEL AYRIM      |
+| Uygulama katmanlari            | Kapsam           |
+| Teslim modu ayrimi ve kurallari| §0.6             |
+| Karma islerde mod sirasi       | §0.6 (A6)        |
+| Kapanis tetikleyicileri        | §1               |
+| Devir adimlari                 | §2               |
+| Gelecek notlari güncelleme     | §2 (Adim 2)      |
+| Son kontrol                    | §2 (Adim 5)      |
+| Force push korumasi            | §2 (Adim 3)      |
+| Kapanis öncesi checklist       | §3               |
+| Baglam takibi ve esikler       | §4               |
+| Soru formati ve kurallari      | §5.1, §5.2       |
+| Öneri doğrulama                | §5.3             |
+| VARSAYIM etiketi               | §5.2             |
+| Dosya isteme protokolü         | §6               |
+| Üretim kontrolü kurallari      | §7.1             |
+| Üretim kontrolleri (8 kontrol) | §7.2             |
+| Blok/format kurallari          | §7.3             |
+| Kod degisikligi sablonu        | §7.4             |
+| Test kapisi ve test komutu     | §7.5             |
+| Test basarisizsa davranisi     | §7.5.3           |
+| Öz-uyum kontrolü               | §7.6             |
+| Kisa mesajlar kapsam disi      | §7               |
+| Prensipler (atıf listesi)      | §8               |
+| Kaçirma kalibi                 | §9               |
+| Protokol bakimi                | §10              |
+0.6 İKİ TESLİM MODU (BAGLAYICI)
+Mod 1: Dökuman Üretimi. Ajan dökumani üretir, kullanici dosyaya
+yazar.
+Mod 2: Kod Üretimi. Kullanici ajani besler; ajan kodu üretir.
+0.6.1 Kurallar
+A1. Ajan, kendisine verilmeyen dosyanin içerigi hakkinda varsayim
+yapmaz. Görmedigi dökumana atif yapmaz. Emin olmadigi yeri
+VARSAYIM: etiketiyle isaretler (§5.2).
+A2. Mod 1'de ajan kod yazmaz. Örnek verse bile "bu bir örnektir,
+projeye girmez" der.
+A3. Mod 2'de ajan dökuman yazmaz; sadece uygular. Yeni kural
+ihtiyaci dogarsa "dökuman güncellemesi önerisi" olarak ayri sunar.
+A4. Mod geçisi kullanici kararidir. Ajan kendi kendine mod
+degistirmez.
+A5. Her iki modda da teslim öncesi §7.6 öz-uyum ve §7.2 kontroller
+çalistirilir. Mod 2'de ayrica §7.5 test kapisi uygulanir.
+A6. Karma islerde sira: önce Mod 1 (kural/dökuman), sonra Mod 2
+(kod). Mod geçisi yine kullanici kararidir (A4).
+1. NE ZAMAN UYGULANIR (KOŞULLU)
+Context window %80 dolarsa.
+Kullanici "yeni sohbet açacagim" veya "baglami tazele" derse.
+Sohbet çok uzarsa (20+ tur veya yogun kod üretimi).
+Büyük bir gelistirme fazi kapaninca (önerilir).
+Güvenilmeyen bir kod/deneme geri alinip checkpoint alininca.
+2. KAPANIŞ ADIMLARI (BAGLAYICI)
+Adim 1: DURUM.md güncelle
+Tamamlanan faz/milestone listesine ekle.
+Kilitli kararlara yeni maddeler ekle.
+Açik konulara yeni maddeler ekle.
+Yeni eklenen modül/dosyalari listeye ekle.
+Test/kapsama durumunu güncelle.
+Adim 2: Gelecek notlari güncelle
+Bu sohbette konusulan ama henüz koda girmemis kararlari, projenin
+gelecek-notlari dosyasina ekle (varsa). Ilgili faz/baslik altina yaz.
+Adim 3: Git checkpoint al
+Testleri çalistir (§7.5.1'deki komut). Tüm testler PASS olmali.
+Testler basarisizsa push YASAK (§7.5.3).
+Local'de güvenli commit'e dön: git reset --hard <checkpoint-hash>
+Remote'a senkronize et: git push origin <branch> --force
+Force push korumasi: Hedef dalin korumali dal veya baskalarinin
+kullandigi paylasilan dal olmadigi dogrulanir. Erisim yoksa veya
+süphe varsa kullaniciya sorulur; onay alinmadan force push yapilmaz.
+Checkpoint hash'ini DURUM.md'ye not et.
+Not: Geri dönmek istenebilecek denemeler için önce yedek branch
+alinabilir: git branch yedek-<tarih>-<konu>
+Adim 4: Yeni sohbet prompt'unu hazirla
+Asistan son mesajda sunu verir:
+Yeni sohbet açilisi için su dosyalari ver:
+DURUM.md (son versiyon)
+Bu protokol dökumani
+Proje anayasa/kural dosyasi (varsa)
+Proje modül/mimari referans dosyasi (varsa)
+Gelecek-notlari dosyasi (varsa)
+Ve su mesaji yaz:
+"<proje adi> projesine devam ediyoruz. <faz/konu>'dan basliyoruz."
+Adim 5: Son kontrol
+Asistan son kontrol yapar:
+[ ] Tüm önemli kararlar DURUM.md'de mi?
+[ ] Tüm açik konular not edildi mi?
+[ ] Git checkpoint alindi mi?
+[ ] Test/kapsama durumu güncel mi?
+[ ] Yeni sohbet için eksik var mi?
+3. CHECKLIST (BAGLAYICI)
+Kapanis öncesi:
+[ ] Son faz kapandi, versiyonlar güncellendi.
+[ ] DURUM.md'ye yeni kilitli kararlar eklendi.
+[ ] DURUM.md'ye yeni açik konular eklendi.
+[ ] Gelecek-notlari dosyasina yeni notlar eklendi.
+[ ] Git checkpoint alindi.
+[ ] Yeni sohbet prompt'u hazirlandi.
+[ ] Son kontrol yapildi.
+4. BAĞLAM TAKİBİ (BAGLAYICI)
+4.1 Kural
+Her asistan mesajinin sonuna tahmini baglam yüzdesi eklenir.
+Format: [baglam: ~%NN]
+Bu deger TAHMİNDİR; mesaj sayisi, üretilen/okunan kod boyutu ve
+konusma hacmine göre yapilir. Kesinlik beklenmez.
+Kullanici istemese de gösterilir.
+Konum: Etiket her zaman mesajin EN SONUNA yazilir; 4-backtick
+blogu varsa blogun DISINA yazilir, blok içine gömülmez (§7.3).
+4.2 Esikler
+| Baglam    | Davranis                                            |
+| --------- | --------------------------------------------------- |
+| < %70     | Normal. Yüzde gösterilir.                           |
+| %70 – %79 | Sari uyari. Mesaj sonunda tek satir: "Baglam yaklasiyor; devir planlamayi düsün." |
+| >= %80    | BUYUK HARFLERLE YILDIZLI UYARI. Üstte ayri blok: "*** UYARI: BAGLAM %NN — DEVIR ZAMANI. ***". Devir adimlari önerilir. |
+4.3 Devir Uyarisi Geldiginde
+Asistan kapanis protokolünü (§2) çalistirir, DURUM.md güncellenir,
+yeni sohbet için dosya listesi + açilis mesaji verilir, kullanici
+onayiyla devir tamamlanir.
+Kullanici devam etmek isterse uyari her mesajda yinelenir; asistan
+kisa tutmaya çalisir.
+4.4 Kaçirma Durumu
+Bu bölümdeki kural ihlal edilirse §9 kaçirma kalibi uygulanir.
+5. KARAR-SORMA VE DOĞRULAMA (KOŞULLU)
+Karmasik kararlar için tam format uygulanir; basit/tek yanitli
+sorular için hafif format yeterlidir. Amaç: soyut soru yok,
+dogrulanmamis öneri yok.
+5.1 Format
+Tam format (karmasik kararlar): Her soru dört parçadan olusur.
+Soru basligi — SORU X — <kisa baslik>
+Baglam — Neden bu soru soruluyor; ilgili karar/dökuman atifi.
+Seçenekler — (A), (B), ... Her biri tek cümle.
+Öneri — Pozisyon + tek cümle gerekçe + dogrulama izi (§5.3).
+Hafif format (basit sorular): Tek satirda soru + öneri + kisa
+gerekçe. Dört parça zorunlu degildir; tek yanitli sorulara izin
+verilir.
+5.2 Kurallar
+Soyut soru yasak; seçenekli veya tek yanitli somut soru sorulur.
+Baglam zorunlu; ilgili dökuman/karar atifi verilir.
+Tam formatta en az 2, en fazla 4 seçenek. Hafif formatta bu sart
+uygulanmaz; tek yanitli sorulara izin verilir.
+Öneri zorunlu; asistan çekimser kalamaz.
+Öneri §5.3'e göre dogrulanmis olmak zorundadir.
+Emin olunmayan bilgi VARSAYIM: etiketiyle sunulur.
+Numarali sorular; birden çok soru varsa A, B, C seklinde.
+Kabul edilen kararlari tekrar sorma.
+Cevaplanmayan soru bir sonraki mesaja tasinir; unutulmaz.
+5.3 Doğrulama
+Asistan öneri sunmadan önce dogrular ve izi mesajda tek satir
+gösterir.
+Kaynak hiyerarsisi (üst katmanla çelisen alt katman önerisi
+verilmez): DURUM.md > AnaYasa > mevcut kod > test çiktisi >
+resmi dokuman > genel bilgi.
+Genel bilgiye dayanan öneri VARSAYIM etiketi gerektirir.
+Dogrulama izi formati:
+"Öneri: (X). Dogrulama: <kaynak listesi> + <kontrol notu>;
+çeliski yok."
+Mevcut kod resmi dokumanla çelisiyorsa bu bir hata sinyalidir;
+öneri verilmeden önce kullaniciya bildirilir.
+5.4 Kaçirma Durumu
+Bu bölümdeki kural ihlal edilirse §9 kaçirma kalibi uygulanir.
+6. DOSYA İSTEME PROTOKOLÜ (KOŞULLU)
+GitHub'da tutulan projelerde geçerlidir. Local-only dosyalar için
+kullanici direkt içerigi paylasir.
+6.1 Kural
+Asistan dosya istemeden önce GitHub base URL'ini DURUM.md'den
+okur. Her dosya için tam link olusturur:
+{base_url}/blob/main/{dosya_yolu}
+Asistan dosya içerigini görmeden varsayim yapmaz; interface'i,
+veri tiplerini dosyadan okur.
+6.2 Ornek (projeden bagimsiz)
+Kullanici: "Cache modülü için mevcut kodlari inceleyelim."
+Asistan: "Su dosyalari paylasir misin:
+https://github.com/<org>/<repo>/blob/main/src/cache/store.py
+https://github.com/<org>/<repo>/blob/main/src/cache/policy.py"
+Kullanici: linkleri acar, içerikleri copy-paste eder.
+7. ÜRETİM KONTROLÜ (BAGLAYICI)
+Asistan bir kodu veya dökumani kullaniciya vermeden önce kontrol
+yapar. Kontrol yapilmadan çikti verilmez.
+Kisa mesajlar (sohbet, soru-cevap) kapsam disidir; sadece
+"dökuman/kod" niteligindeki çiktilar için geçerlidir (§7.5).
+7.1 Kural
+Teslim öncesi §7.2 kontroller çalistirilir. Kontrol sonucu mesajda
+kisa bir checklist olarak gösterilir (düz metin, §7.3). Kontrol
+basarisizsa çikti verilmez; düzeltilir ve yeniden kontrol edilir.
+Bu kural kullanici tarafindan geçersiz kilinamaz (§8).
+7.2 Kontroller
+Kontrol 1 — Format: §7.3'e uygunluk.
+Kontrol 2 — İçerik: Istenen degisiklikler islendi mi; istenmeyen
+yan etki var mi.
+Kontrol 3 — Atif/Bayatlik/SSOT: Bölüm numaralari dogru mu; ölü
+referans var mi; canli belge atiflarinda versiyon yok mu; SSOT
+ihlali var mi (§0.5).
+Kontrol 4 — Versiyon: Versiyon güncellenmesi gerekti mi; kullanici
+onayina hazir mi (§10.1). Tarih güncel mi.
+Kontrol 5 — Tutarlilik: Diger dökumanlarla veya anayasa ile
+çeliski var mi.
+Kontrol 6 — Test: §7.5'e uygunluk (dökuman çiktilarinda N/A).
+Kontrol 7 — Mantik/Semantik: Kod hangi karara hizmet ediyor;
+sinir/hata durumlari ele alindi mi; geriye uyumluluk korunuyor mu;
+concurrency ve kaynak yasam döngüsü ele alindi mi.
+Kontrol 8 — Güvenlik: Secrets yok; girdi secret korumasi
+uygulandi; input validation var; yetki kontrolü var; injection
+riski yok; güvensiz deserialization yok; hata mesaji iç detay
+sizdirmiyor (kod çiktilarinda zorunlu; dökumanda N/A).
+7.3 Format Kurallari
+Her dökuman/kod blogu AYRI bir 4-backtick blogunda verilir.
+Birden çok çikti varsa her biri kendi blogunu alir.
+4-backtick içinde 3-backtick YASAK. Dökuman içindeki kod
+örnekleri 4-space indentation ile verilir.
+Kontrol checklist'i DÜZ METIN gösterilir; kod bloguna alinmaz.
+YAML/JSON: blogun ilk satirina #yaml veya #json marker yazilir.
+"Full dökuman ver" -> tek 4-backtick blogu, parça parça degil.
+Baglam etiketi [baglam: ~%NN] her zaman blogun DISINA yazilir
+(§4.1).
+7.4 Kod Degisikligi Sablonu
+Mevcut dosyada degisiklik önerilirken (Mod 2) uygulanir. Yeni
+dosya iskeletleri ve tam dosya çiktilarinda uygulanmaz; onlar
+tam dosya olarak verilir (§7.3).
+Her degisiklik bir "Degisiklik N" blogu olarak sunulur:
+Tam dosya yolu (proje root'tan itibaren)
+Degisiklik lokasyonu (satir araligi veya fonksiyon adi)
+"Eski hali:" + 4-space indentation kod blogu
+"Yeni hali:" + 4-space indentation kod blogu
+"Gerekçe:" tek cümle (ilgili karar/YAMA atifi varsa)
+Kurallar: Dosya yolu zorunlu. Eski hali mevcut koda birebir
+eslesmeli. Yeni hali proje anayasa/kural dosyasina uygun olmali.
+Ayni dosyada birden çok degisiklik varsa her biri ayri blog.
+Canli belge atiflarinda versiyon yok (§7.2 Kontrol 3).
+7.5 Test Kapisi
+Kod teslimi ile push ayni test sartina tabidir. Mod 2 için
+zorunlu; Mod 1'de N/A.
+7.5.1 Test Komutu (SSOT)
+Test komutu proje anayasa dosyasindan okunur.
+Gecersiz kilma: DURUM.md'de farkli tanimliysa o komut kullanilir.
+7.5.2 Zorunlu Adimlar
+Ortam ön kosulu: Dil sürümü, sanal ortam, bagimliliklar
+beklenen durumda mi.
+Derleme kontrolü: Degisen dosyalar derlenebiliyor mu (proje
+anayasa dosyasindaki komutla).
+Pin kontrolü: Yeni paket eklendiyse versiyon pinlendi mi
+(lock dosyalari dahil).
+Birim test: §7.5.1'deki komutla; yeni + mevcut testler PASS.
+Flaky tespiti: Süpheli sonuç varsa ayni test en az 2 kez
+çalistirilir.
+Regresyon: Önceki PASS testler hâlâ PASS mi.
+Güvenlik taramasi: Dependency vulnerability + secrets taramasi
+(§7.2 Kontrol 8 ile tutarli).
+7.5.3 Test Basarisizsa
+Önce fix, sonra test, sonra teslim. Test geçmeden teslim YASAK.
+Istisna: Kullanici açikça "test edilmemis halini göster" derse,
+çikti *** TEST EDILMEMIS *** etiketiyle verilir ve risk tek cümle
+yazilir. Sonraki adimda test zorunludur.
+7.6 Öz-Uyum
+Asistan her mesaji göndermeden önce asagidaki kritik maddeleri
+kontrol eder. Bunlar en sik ihlal edilen kurallardir.
+[ ] Baglam etiketi dogru mu (§4.1)?
+[ ] Teslim modu net mi; Mod 1'de kod, Mod 2'de dökuman yazilmadi
+mi (§0.6)?
+[ ] SSOT ihlali yok mu (§0.5)?
+[ ] Mod 2 ise test kapisi uygulandi mi (§7.5)?
+[ ] Format kurallarina uyuldu mu; iç içe 3-backtick yok mu (§7.3)?
+[ ] Kontrol sonucu mesajda gösterildi mi (§7.1)?
+Diger kontroller (§7.2) zaten teslim öncesi çalistirilir; burada
+tekrarlanmaz. Ihlal varsa çikti gönderilmez; düzeltilir ve §9'a
+göre kaydedilir.
+8. PRENSİPLER (BAGLAYICI — ATIF LİSTESİ)
+Bu bölüm sadece atıf listesidir; detayli kurallar kendi
+bölümlerinde tanimlidir.
+Teslim modlari (§0.6)
+Baglam takibi (§4)
+Karar-sorma ve dogrulama (§5)
+Üretim kontrolü (§7.1, §7.2)
+Test kapisi (§7.5)
+Öz-uyum (§7.6)
+Kaçirma kalibi (§9)
+Protokol bakimi (§10)
+Kağıt-öncelikli tasarim
+Test odakli gelistirme
+Övgü yok, sycophancy yok
+Gerekçesiz öneri yok
+Kullanici karar verir, asistan uygular
+Proje anayasa/kurallari baglayicidir
+SSOT baglayici (§0.5)
+Versiyonlama kullanici sorumlulugundadir (§10.1)
+Ara özet ver (TAVSIYE)
+Kullanici yorgunsa dur (TAVSIYE)
+Protokolü proje bilgisiyle doldurma (TEMEL AYRIM)
+9. KAÇIRMA KALIBI (BAGLAYICI)
+Bu protokoldeki herhangi bir kural ihlal edildiginde ortak kalip
+uygulanir. Bölüm-özel "kaçirma durumu" maddeleri bu bölüme atif
+yapar (§4.4, §5.4, §7).
+9.1 Kalip
+Kullanici ihlali fark ettiginde asistan hatayi kabul eder;
+gerekçe üretmez, savunmaya geçmez.
+Protokol ihlali olarak DURUM.md'ye not düsülür. Not Mod 1
+akisiyla üretilir: asistan notu hazirlar, kullanici dosyaya
+yazar (§0.6).
+Ilgili çikti geri çekilir; kural yeniden uygulanir; çikti
+yeniden verilir.
+9.2 Asistanin Kendi Kendine Fark Etmesi
+Asistan §7.6 öz-uyum kontrolünde ihlali kendisi yakalarsa, çiktiyi
+göndermeden düzeltir ve DURUM.md'ye not düser (§9.1'deki Mod 1
+akisiyla). Kullaniciyi ayrica bilgilendirmek zorunda degildir.
+9.3 Tekrarlayan Ihlal
+Ayni kural 3 kez ihlal edilirse, o kural için protokol güncellemesi
+önerilir. Protokol güncellemesi §10'a tabidir.
+10. PROTOKOL BAKIMI (BAGLAYICI)
+Amaç: protokolün kendi güncelleme sürecini tanimlamak; degisiklik
+keyfi olmasin, onayli olsun.
+10.1 Yetki
+Protokol versiyonlama ve tarih kullanici sorumlulugundadir;
+asistan kullanici onayi olmadan versiyon numarasi veya tarihi
+degistirmez. Kapsam büyükse yeni versiyon, küçük düzeltme patch.
+10.2 Öneri akisi
+Degisiklik önerisi asistan veya kullanici tarafindan yapilir.
+Öneri kullanici onayina tabidir; onay olmadan protokol degismez.
+10.3 Tekrarlayan ihlal
+§9.3'teki kural bu bölüme tabidir.
+10.4 Degisiklik sonrasi kontrol
+Degisiklik sonrasi §7.6 öz-uyum kontrolü çalistirilir; SSOT
+ihlali ve çeliski taranir.
+10.5 Kapsam
+Protokol güncellemesi Mod 1 kapsamindadir; ajan kodu etkilenmez
+(§0.6).
+SON
