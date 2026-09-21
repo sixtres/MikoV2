@@ -88,6 +88,9 @@ class Trade:
     pnl_gross: float
     pnl_net: float
     r_multiple: float
+    # SORU N (B2e.2): walk-forward bağlamı (additive).
+    window_id: int = 0
+    fold_id: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -106,6 +109,8 @@ class Trade:
             "pnl_gross": round(self.pnl_gross, 8),
             "pnl_net": round(self.pnl_net, 8),
             "r_multiple": round(self.r_multiple, 4),
+            "window_id": self.window_id,
+            "fold_id": self.fold_id,
         }
 
 
@@ -156,8 +161,16 @@ class _Candle5s:
 
 
 class PositionSimulator:
-    def __init__(self, config: PositionSimConfig) -> None:
+    def __init__(
+        self,
+        config: PositionSimConfig,
+        *,
+        window_id: int = 0,
+        fold_id: int = 0,
+    ) -> None:
         self._cfg = config
+        self._window_id = int(window_id)
+        self._fold_id = int(fold_id)
         self._realized_equity = float(config.initial_equity)
         self._candle_cap = max(config.atr_period * 4, 100)
         # B2e.0 — per-symbol state
@@ -168,6 +181,8 @@ class PositionSimulator:
         self._last_funding_rate: dict[str, float] = {}
         self._next_funding_ms: dict[str, int] = {}
         self._trades: list[Trade] = []
+        # SORU X (B2e.1): K'' diagnostics — son red nedeni (additive).
+        self._last_rejection_reason: str | None = None
 
     # ---------------------------------------------------------- feeds
 
@@ -223,11 +238,16 @@ class PositionSimulator:
 
     def on_entry(self, signal: EntrySignal, symbol: str) -> bool:
         cfg = self._cfg
+        # SORU X (B2e.1): her deneme başında sıfırla.
+        self._last_rejection_reason = None
         if symbol in self._positions:
+            self._last_rejection_reason = "per_symbol_max_position"
             return False
         if len(self._positions) >= cfg.max_positions_global:
+            self._last_rejection_reason = "global_limit_full"
             return False
         if cfg.max_positions_per_symbol < 1:
+            self._last_rejection_reason = "per_symbol_max_position"
             return False
         atr = self._atr(symbol)
         if atr is None or atr <= 0.0:
@@ -317,6 +337,11 @@ class PositionSimulator:
     @property
     def open_positions(self) -> dict[str, _Position]:
         return dict(self._positions)
+
+    @property
+    def last_rejection_reason(self) -> str | None:
+        # SORU X (B2e.1): K'' diagnostics — son red nedeni.
+        return self._last_rejection_reason
 
     def build_report(self) -> BacktestReport:
         cfg = self._cfg
@@ -484,6 +509,8 @@ class PositionSimulator:
             pnl_gross=pnl_gross,
             pnl_net=pnl_net,
             r_multiple=r_mult,
+            window_id=self._window_id,
+            fold_id=self._fold_id,
         ))
         self._realized_equity += pnl_net
 

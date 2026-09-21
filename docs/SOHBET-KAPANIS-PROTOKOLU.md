@@ -686,6 +686,15 @@ yazar (§0.6).
 Ilgili çikti geri çekilir; kural yeniden uygulanir; çikti
 yeniden verilir.
 Sonraki turlarda ilgili kural için denetim sikilasir.
+PROTOKOL İHLALİ NOTU (2026-09-21, B2e.1 ortası):
+
+Asistan, PO'nun ilettiği "974 pass" beyanını DURUM §2'deki
+783 PASS ile karşılaştırmadan doğru kabul etti; fark +191
+mantıksız iken §7.2 Kontrol 5 (sayı tutarlılığı) ve §7.9.1
+(VARSAYIM etiketi) uygulanmadı. Doğru sayı 794 PASS
+(783 + 11 B2e.1 testi). 974 beyanı PO tarafından geri çekildi.
+B2e.1 sonucu etkilenmedi; kayıt amacıyla not edildi.
+
 10.2 Asistanin Kendi Kendine Fark Etmesi
 Asistan §7.9 öz-uyum kontrolünde ihlali kendisi yakalarsa,
 çiktiyi göndermeden düzeltir ve DURUM.md'ye not düser

@@ -55,6 +55,8 @@ class Strategy:
         self._last_oi_usdt: float = 0.0
         self._last_funding_rate: float = 0.0
         self.signal_counts: Counter = Counter()
+        # SORU X (B2e.1): K'' diagnostics — son red nedeni (additive).
+        self._last_rejection_reason: str | None = None
 
     # -------------------------------------------------- feeds
 
@@ -81,6 +83,8 @@ class Strategy:
 
     def _try_entry(self, ts_ms: int, price: float) -> list[EntrySignal]:
         cfg = self._cfg
+        # SORU X (B2e.1): her deneme başında sıfırla.
+        self._last_rejection_reason = None
         if self._last_trust < cfg.min_whale_trust:
             return []
         window_start = ts_ms - cfg.entry_window_ms
@@ -112,6 +116,7 @@ class Strategy:
         
         out: list[EntrySignal] = []
         contributing = tuple(s.kind.value for _, s in recent)
+        cooldown_blocked = False
 
         if long_ok:
             last = self._last_entry_ms.get(Direction.LONG, 0)
@@ -124,6 +129,8 @@ class Strategy:
                     reason="sweep+mss+fvg aligned long",
                     signals=contributing,
                 ))
+            else:
+                cooldown_blocked = True
         if short_ok:
             last = self._last_entry_ms.get(Direction.SHORT, 0)
             if ts_ms - last >= cfg.cooldown_ms:
@@ -135,6 +142,11 @@ class Strategy:
                     reason="sweep+mss+fvg aligned short",
                     signals=contributing,
                 ))
+            else:
+                cooldown_blocked = True
+        # SORU X + SORU K'': setup mevcut fakat cooldown engelledi.
+        if not out and cooldown_blocked:
+            self._last_rejection_reason = "cooldown_active"
         return out
 
     # -------------------------------------------------- accessors
@@ -146,3 +158,8 @@ class Strategy:
     @property
     def entry_count(self) -> int:
         return len(self._entries)
+
+    @property
+    def last_rejection_reason(self) -> str | None:
+        # SORU X (B2e.1): K'' diagnostics — son denemenin red nedeni.
+        return self._last_rejection_reason

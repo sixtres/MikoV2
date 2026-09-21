@@ -256,3 +256,84 @@ class ReplayTransport:
         if not mins or not maxs:
             return None
         return int(min(mins)), int(max(maxs))
+
+    def collect_ohlcv_secs(
+        self,
+        symbols: list[str],
+        ts_from: int,
+        ts_to: int,
+    ) -> dict[str, list[int]]:
+        """
+        B2e.2 — walk-forward per-fold data_quality için symbol başına
+        OHLCV sec listesi (artan sıra).
+        """
+        out: dict[str, list[int]] = {}
+        conn = sqlite3.connect(
+            "file:%s?mode=ro" % str(self._db_path), uri=True
+        )
+        try:
+            for sym in symbols:
+                cur = conn.execute(
+                    "SELECT sec FROM trades_ohlcv_1s "
+                    "WHERE symbol=? AND sec*1000 >= ? AND sec*1000 <= ? "
+                    "ORDER BY sec ASC",
+                    (sym, ts_from, ts_to),
+                )
+                out[sym] = [int(r[0]) for r in cur]
+        finally:
+            conn.close()
+        return out
+
+    def collect_ticker_secs(
+        self,
+        symbols: list[str],
+        ts_from: int,
+        ts_to: int,
+    ) -> dict[str, list[int]]:
+        """
+        B2e.3 — ticker_coverage için symbol başına ticker sec listesi
+        (ts_ms // 1000, artan).
+        """
+        out: dict[str, list[int]] = {}
+        conn = sqlite3.connect(
+            "file:%s?mode=ro" % str(self._db_path), uri=True
+        )
+        try:
+            for sym in symbols:
+                cur = conn.execute(
+                    "SELECT ts_ms FROM tickers_snapshot "
+                    "WHERE symbol=? AND ts_ms >= ? AND ts_ms <= ? "
+                    "ORDER BY ts_ms ASC",
+                    (sym, ts_from, ts_to),
+                )
+                out[sym] = [int(r[0]) // 1000 for r in cur]
+        finally:
+            conn.close()
+        return out
+
+    def collect_depth_secs(
+        self,
+        symbols: list[str],
+        ts_from: int,
+        ts_to: int,
+    ) -> dict[str, list[int]]:
+        """
+        B2e.3 — depth_coverage için symbol başına orderbook snapshot
+        sec listesi (timestamp_ms // 1000, artan).
+        """
+        out: dict[str, list[int]] = {}
+        conn = sqlite3.connect(
+            "file:%s?mode=ro" % str(self._db_path), uri=True
+        )
+        try:
+            for sym in symbols:
+                cur = conn.execute(
+                    "SELECT timestamp_ms FROM orderbook_snapshots "
+                    "WHERE symbol=? AND timestamp_ms >= ? "
+                    "AND timestamp_ms <= ? ORDER BY timestamp_ms ASC",
+                    (sym, ts_from, ts_to),
+                )
+                out[sym] = [int(r[0]) // 1000 for r in cur]
+        finally:
+            conn.close()
+        return out
