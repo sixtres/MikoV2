@@ -47,10 +47,13 @@ class BulkMetricsFetcher:
         rest: "MEXCRestClient",
         config: FetcherConfig,
         contract_sizes: dict[str, float],
+        excluded_symbols: frozenset[str] = frozenset(),
     ) -> None:
         self._rest = rest
         self._cfg = config
         self._contract_sizes = contract_sizes
+        # §6.2: emtia/hisse token exclude (DI ile gelir; default bos)
+        self._excluded = excluded_symbols
 
     @staticmethod
     def _spread_bps(bid: float, ask: float) -> float:
@@ -68,6 +71,9 @@ class BulkMetricsFetcher:
 
         for item in raw:
             sym = item["symbol"]
+            # §6.2: exclude -- skorlama ve normalizasyondan once ele
+            if sym in self._excluded:
+                continue
             cs = self._contract_sizes.get(sym)
             if cs is None or cs <= 0:
                 continue
@@ -104,11 +110,16 @@ class BulkMetricsFetcher:
         for s in candidates:
             vol_norm = s.volume24_usd / max_vol
             oi_norm = s.oi_usd / max_oi
-            f_abs = min(abs(s.funding_rate) / 0.005, 1.0)
+            # §6.1: asiri funding (> %0.5) ceza; aksi halde dogrusal skor
+            f_abs = abs(s.funding_rate)
+            if f_abs > 0.005:
+                f_score = -1.0
+            else:
+                f_score = f_abs / 0.005
             score = (
                 cfg.weight_volume * vol_norm
                 + cfg.weight_oi * oi_norm
-                + cfg.weight_funding * f_abs
+                + cfg.weight_funding * f_score
             )
             scored.append(RankedSymbol(
                 symbol=s.symbol,

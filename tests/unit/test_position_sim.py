@@ -12,11 +12,12 @@ from src.backtest.replay_transport import OHLCVEvent, TickerEvent
 from src.backtest.strategy import Direction, EntrySignal
 
 
-def _ohlcv(sec, o, h, l, c):
+def _ohlcv(sec, o, h, l, c, symbol="BTC_USDT"):
     return OHLCVEvent(
         sec=sec, ts_ms=sec * 1000,
         open=o, high=h, low=l, close=c,
         buy_vol=0.0, sell_vol=0.0, trade_count=1,
+        symbol=symbol,
     )
 
 
@@ -27,13 +28,15 @@ def _entry(direction, ts_ms, price):
     )
 
 
-def _warm(sim, start_sec, n, price=100.0, half_range=0.5):
+def _warm(sim, start_sec, n, price=100.0, half_range=0.5,
+          symbol="BTC_USDT"):
     """Feed n 5s candles with stable OHLC for ATR history."""
     sec = start_sec
     last_sec = sec
     for _ in range(n):
         sim.on_ohlcv(_ohlcv(
-            sec, price, price + half_range, price - half_range, price
+            sec, price, price + half_range, price - half_range, price,
+            symbol=symbol,
         ))
         last_sec = sec
         sec += 5
@@ -140,7 +143,9 @@ def test_per_symbol_max_one_position():
 # ------------------------------------------------------------- 8
 def test_global_concurrent_limit():
     sim = PositionSimulator(PositionSimConfig(max_positions_global=2))
-    last_sec = _warm(sim, 1000, 25)
+    last_sec = _warm(sim, 1000, 25, symbol="BTC_USDT")
+    _warm(sim, 1000, 25, symbol="ETH_USDT")
+    _warm(sim, 1000, 25, symbol="SOL_USDT")
     ts = (last_sec + 5) * 1000
     assert sim.on_entry(_entry(Direction.LONG, ts, 100.0), "BTC_USDT")
     assert sim.on_entry(_entry(Direction.SHORT, ts, 100.0), "ETH_USDT")

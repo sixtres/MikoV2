@@ -1,9 +1,18 @@
 # YAMA Y-353: DI, no global
 # REV8: SQLite-backed replay transport for backtest
+# B2e.0: multi-symbol + SORU J' tie-break (event_type_rank, symbol, source_seq)
 
 """
 Replay transport - merges OHLCV/depth/ticker streams from SQLite
 into a single chronological event stream.
+
+B2e.0 degisiklikleri:
+  - Tum event'ler symbol + source_seq alanlarini tasir
+  - stream_multi(symbols) SORU C interleaved cok sembollu stream
+  - SORU J' tie-break: (ts_ms, event_type_rank, symbol, source_seq)
+    rank: OHLCV=0, Depth=1, Ticker=2
+  - source_seq (SORU U): trades_ohlcv_1s.sec / orderbook_snapshots.id /
+    tickers_snapshot.id
 """
 
 from __future__ import annotations
@@ -27,6 +36,8 @@ class OHLCVEvent:
     buy_vol: float
     sell_vol: float
     trade_count: int
+    symbol: str = "BTC_USDT"
+    source_seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +47,8 @@ class DepthEvent:
     bids: list
     asks: list
     depth: int
+    symbol: str = "BTC_USDT"
+    source_seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,18 +61,35 @@ class TickerEvent:
     oi_usdt: float
     funding_rate: float
     next_settle_ms: int
+    symbol: str = "BTC_USDT"
+    source_seq: int = 0
 
 
 AnyEvent = OHLCVEvent | DepthEvent | TickerEvent
 
+_RANK_OHLCV = 0
+_RANK_DEPTH = 1
+_RANK_TICKER = 2
+
+
+def _event_rank(ev: AnyEvent) -> int:
+    if isinstance(ev, OHLCVEvent):
+        return _RANK_OHLCV
+    if isinstance(ev, DepthEvent):
+        return _RANK_DEPTH
+    return _RANK_TICKER
+
+
+def _merge_key(ev: AnyEvent) -> tuple:
+    return (ev.ts_ms, _event_rank(ev), ev.symbol, ev.source_seq)
+
 
 class ReplayTransport:
     """
-    Reads 3 tables (trades_ohlcv_1s, orderbook_snapshots, tickers_snapshot)
-    and yields events in chronological order.
+    Reads 3 tables (trades_ohlcv_1s, orderbook_snapshots, tickers_snapshot).
 
-    Symbols: single-symbol streams assumed (BTC_USDT). Multi-symbol
-    extension later by adding symbol filter.
+    stream() — single symbol (backward compat).
+    stream_multi(symbols) — SORU C interleaved; SORU J' tie-break.
     """
 
     def __init__(self, db_path: Path, symbol: str = "BTC_USDT") -> None:
@@ -69,14 +99,14 @@ class ReplayTransport:
     # ------------------------------------------------------------ generators
 
     def _ohlcv_gen(
-        self, conn: sqlite3.Connection, ts_from: int, ts_to: int
+        self, conn: sqlite3.Connection, symbol: str, ts_from: int, ts_to: int
     ) -> Iterator[OHLCVEvent]:
         cur = conn.execute(
             "SELECT sec, open, high, low, close, buy_vol, sell_vol, trade_count "
             "FROM trades_ohlcv_1s "
             "WHERE symbol=? AND sec*1000 >= ? AND sec*1000 <= ? "
             "ORDER BY sec ASC",
-            (self._symbol, ts_from, ts_to),
+            (symbol, ts_from, ts_to),
         )
         for row in cur:
             sec = int(row[0])
@@ -90,17 +120,19 @@ class ReplayTransport:
                 buy_vol=float(row[5] or 0.0),
                 sell_vol=float(row[6] or 0.0),
                 trade_count=int(row[7] or 0),
+                symbol=symbol,
+                source_seq=sec,
             )
 
     def _depth_gen(
-        self, conn: sqlite3.Connection, ts_from: int, ts_to: int
+        self, conn: sqlite3.Connection, symbol: str, ts_from: int, ts_to: int
     ) -> Iterator[DepthEvent]:
         cur = conn.execute(
-            "SELECT timestamp_ms, version, bids_json, asks_json, depth "
+            "SELECT timestamp_ms, version, bids_json, asks_json, depth, id "
             "FROM orderbook_snapshots "
             "WHERE symbol=? AND timestamp_ms >= ? AND timestamp_ms <= ? "
-            "ORDER BY timestamp_ms ASC",
-            (self._symbol, ts_from, ts_to),
+            "ORDER BY timestamp_ms ASC, id ASC",
+            (symbol, ts_from, ts_to),
         )
         for row in cur:
             try:
@@ -115,18 +147,20 @@ class ReplayTransport:
                 bids=bids,
                 asks=asks,
                 depth=int(row[4] or 0),
+                symbol=symbol,
+                source_seq=int(row[5] or 0),
             )
 
     def _ticker_gen(
-        self, conn: sqlite3.Connection, ts_from: int, ts_to: int
+        self, conn: sqlite3.Connection, symbol: str, ts_from: int, ts_to: int
     ) -> Iterator[TickerEvent]:
         cur = conn.execute(
             "SELECT ts_ms, last_price, fair_price, index_price, "
-            "hold_vol, oi_usdt, funding_rate, next_settle_ms "
+            "hold_vol, oi_usdt, funding_rate, next_settle_ms, id "
             "FROM tickers_snapshot "
             "WHERE symbol=? AND ts_ms >= ? AND ts_ms <= ? "
-            "ORDER BY ts_ms ASC",
-            (self._symbol, ts_from, ts_to),
+            "ORDER BY ts_ms ASC, id ASC",
+            (symbol, ts_from, ts_to),
         )
         for row in cur:
             yield TickerEvent(
@@ -138,24 +172,46 @@ class ReplayTransport:
                 oi_usdt=float(row[5] or 0.0),
                 funding_rate=float(row[6] or 0.0),
                 next_settle_ms=int(row[7] or 0),
+                symbol=symbol,
+                source_seq=int(row[8] or 0),
             )
 
     # ------------------------------------------------------------ stream
 
     def stream(self, ts_from: int, ts_to: int) -> Iterator[AnyEvent]:
-        """
-        Yield events in ascending ts_ms order.
-
-        ts_from, ts_to: inclusive epoch ms bounds.
-        """
+        """Single-symbol stream (backward compat)."""
         conn = sqlite3.connect(
             "file:%s?mode=ro" % str(self._db_path), uri=True
         )
         try:
-            a = self._ohlcv_gen(conn, ts_from, ts_to)
-            b = self._depth_gen(conn, ts_from, ts_to)
-            c = self._ticker_gen(conn, ts_from, ts_to)
-            for ev in heapq.merge(a, b, c, key=lambda e: e.ts_ms):
+            a = self._ohlcv_gen(conn, self._symbol, ts_from, ts_to)
+            b = self._depth_gen(conn, self._symbol, ts_from, ts_to)
+            c = self._ticker_gen(conn, self._symbol, ts_from, ts_to)
+            for ev in heapq.merge(a, b, c, key=_merge_key):
+                yield ev
+        finally:
+            conn.close()
+
+    def stream_multi(
+        self, symbols: list[str], ts_from: int, ts_to: int
+    ) -> Iterator[AnyEvent]:
+        """
+        SORU C: interleaved multi-symbol stream.
+        SORU J' tie-break: (ts_ms, event_type_rank, symbol, source_seq).
+        """
+        syms = sorted(set(symbols))
+        conn = sqlite3.connect(
+            "file:%s?mode=ro" % str(self._db_path), uri=True
+        )
+        try:
+            gens: list[Iterator[AnyEvent]] = []
+            for sym in syms:
+                gens.append(self._ohlcv_gen(conn, sym, ts_from, ts_to))
+            for sym in syms:
+                gens.append(self._depth_gen(conn, sym, ts_from, ts_to))
+            for sym in syms:
+                gens.append(self._ticker_gen(conn, sym, ts_from, ts_to))
+            for ev in heapq.merge(*gens, key=_merge_key):
                 yield ev
         finally:
             conn.close()
@@ -163,10 +219,6 @@ class ReplayTransport:
     # ------------------------------------------------------------ range
 
     def get_time_range(self) -> tuple[int, int] | None:
-        """
-        Return (min_ms, max_ms) covering all tables for symbol.
-        None if no data.
-        """
         conn = sqlite3.connect(
             "file:%s?mode=ro" % str(self._db_path), uri=True
         )

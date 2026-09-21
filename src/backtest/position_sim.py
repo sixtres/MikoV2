@@ -1,27 +1,30 @@
 # src/backtest/position_sim.py
 # YAMA Y-353: DI, no global
 # REV8: B2c — Position simulator + PnL (DURUM §8)
+# B2e.0: multi-symbol per-symbol state + finalize dict + MTM equity
+#        (SORU B + SORU L'')
 
 """
-B2c — Position simulator.
+B2c — Position simulator. B2e.0 — multi-symbol infrastructure.
 
-Consumes EntrySignal from Strategy, tracks per-symbol positions
-(max 1 concurrent) + global concurrency, applies TP/SL exits on 5s
-OHLCV high/low, optional funding cost accrual, produces Trade list
-and summary report.
-
-Kilitli kararlar (DURUM §8):
+Kilitli kararlar (DURUM §8 + §16):
   SORU A: SL = entry ∓ 0.5×ATR(14, 5s); TP = entry ± 2R
           + max_sl_distance_pct 0.025 üst sınır
+          + min_sl_distance_pct 0.002 alt sınır (SORU G-C)
   SORU B: qty = (equity × risk_pct) / |entry − SL|
           PROD=0.006 / TEST=0.008 (AnaYasa §3)
-  SORU C: entry = signal bar close ± leverage-adjusted slippage
+  SORU C: entry = signal bar close ± slippage (bps)
   SORU D: aynı 5s mumda TP+SL → SL önce (konservatif)
-  SORU E: --include-funding, default kapalı (8h UTC 00/08/16)
-  SORU F: multi-symbol tasarım destekler; test tek-sembol
+  SORU E: --include-funding, default kapalı
+  SORU B2e.0 (§16 SORU B): per-symbol _active/_candles/_next_funding_ms/
+          _last_funding_rate; on_ohlcv(ev) ev.symbol okur;
+          finalize(last_ts_ms, last_prices: dict)
+  SORU L'' (§16): işlem sırası exit/TP/SL → funding → MTM → entry sizing.
+          Equity MTM: realized + unrealized (entry_fee + funding_paid
+          + gross unrealized). MTM'de exit fee tahmini yok.
 
 VARSAYIM (PO teyidi bekleniyor):
-  - initial_equity default 10_000 (DURUM'da yok)
+  - initial_equity default 10_000
   - Fee: TP maker(0.0), SL/END taker(0.0002)
   - entry_slippage_bps 2.0 (SORU H-A)
   - min_sl_distance_pct 0.002 (SORU G-C)
@@ -53,25 +56,19 @@ class ExitReason(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class PositionSimConfig:
-    # SORU B (DURUM §8)
-    initial_equity: float = 10_000.0        # VARSAYIM
-    risk_pct: float = 0.008                 # AnaYasa §3 TEST default
-    # SORU A (DURUM §8)
+    initial_equity: float = 10_000.0
+    risk_pct: float = 0.008
     atr_period: int = 14
     sl_atr_multiplier: float = 0.5
     tp_r_multiple: float = 2.0
-    max_sl_distance_pct: float = 0.025      # AnaYasa max_sl_distance
-    min_sl_distance_pct: float = 0.002      # SORU G-C — VARSAYIM
-    # SORU C (DURUM §8) — SORU H (A) fill slippage bps tabanlı
-    entry_slippage_bps: float = 2.0         # VARSAYIM
-    # Fee (DURUM §8)
+    max_sl_distance_pct: float = 0.025
+    min_sl_distance_pct: float = 0.002
+    entry_slippage_bps: float = 2.0
     fee_taker: float = 0.0002
     fee_maker: float = 0.0
-    # SORU E (DURUM §8)
     include_funding: bool = False
-    # Concurrency (DURUM §8)
     max_positions_per_symbol: int = 1
-    max_positions_global: int = 3           # TEST default
+    max_positions_global: int = 3
 
 
 @dataclass(slots=True)
@@ -161,60 +158,68 @@ class _Candle5s:
 class PositionSimulator:
     def __init__(self, config: PositionSimConfig) -> None:
         self._cfg = config
-        self._equity = float(config.initial_equity)
-        cap = max(config.atr_period * 4, 100)
-        self._candles: deque[_Candle5s] = deque(maxlen=cap)
-        self._active: _Candle5s | None = None
+        self._realized_equity = float(config.initial_equity)
+        self._candle_cap = max(config.atr_period * 4, 100)
+        # B2e.0 — per-symbol state
+        self._candles: dict[str, deque[_Candle5s]] = {}
+        self._active: dict[str, _Candle5s] = {}
         self._positions: dict[str, _Position] = {}
+        self._last_price: dict[str, float] = {}
+        self._last_funding_rate: dict[str, float] = {}
+        self._next_funding_ms: dict[str, int] = {}
         self._trades: list[Trade] = []
-        self._last_funding_rate: float = 0.0
-        self._next_funding_ms: int | None = None
 
     # ---------------------------------------------------------- feeds
 
     def on_ohlcv(self, ev: OHLCVEvent) -> None:
         cfg = self._cfg
-        if self._next_funding_ms is None:
-            self._next_funding_ms = _next_funding_ts(ev.ts_ms)
-        while ev.ts_ms >= self._next_funding_ms:
+        symbol = ev.symbol
+
+        # (1) candle transition -> exit check (SORU L'': exit once)
+        bucket_sec = (ev.sec // _CANDLE_SEC) * _CANDLE_SEC
+        active = self._active.get(symbol)
+        if active is None:
+            self._active[symbol] = _Candle5s(
+                sec=bucket_sec,
+                ts_ms=bucket_sec * 1000,
+                open=ev.open,
+                high=ev.high,
+                low=ev.low,
+                close=ev.close,
+            )
+        elif bucket_sec > active.sec:
+            self._finalize_active(symbol)
+            self._active[symbol] = _Candle5s(
+                sec=bucket_sec,
+                ts_ms=bucket_sec * 1000,
+                open=ev.open,
+                high=ev.high,
+                low=ev.low,
+                close=ev.close,
+            )
+        elif bucket_sec == active.sec:
+            if ev.high > active.high:
+                active.high = ev.high
+            if ev.low < active.low:
+                active.low = ev.low
+            active.close = ev.close
+        # else: out-of-order 1s event, drop silently
+
+        # (2) funding check (SORU L'': funding after exit) — per-symbol timeline
+        if symbol not in self._next_funding_ms:
+            self._next_funding_ms[symbol] = _next_funding_ts(ev.ts_ms)
+        while ev.ts_ms >= self._next_funding_ms[symbol]:
             if cfg.include_funding:
-                self._apply_funding()
-            self._next_funding_ms = _next_funding_ts(
-                self._next_funding_ms + 1
+                self._apply_funding(symbol)
+            self._next_funding_ms[symbol] = _next_funding_ts(
+                self._next_funding_ms[symbol] + 1
             )
 
-        bucket_sec = (ev.sec // _CANDLE_SEC) * _CANDLE_SEC
-        if self._active is None:
-            self._active = _Candle5s(
-                sec=bucket_sec,
-                ts_ms=bucket_sec * 1000,
-                open=ev.open,
-                high=ev.high,
-                low=ev.low,
-                close=ev.close,
-            )
-            return
-        if bucket_sec > self._active.sec:
-            self._finalize_active()
-            self._active = _Candle5s(
-                sec=bucket_sec,
-                ts_ms=bucket_sec * 1000,
-                open=ev.open,
-                high=ev.high,
-                low=ev.low,
-                close=ev.close,
-            )
-        elif bucket_sec == self._active.sec:
-            b = self._active
-            if ev.high > b.high:
-                b.high = ev.high
-            if ev.low < b.low:
-                b.low = ev.low
-            b.close = ev.close
-        # else: out-of-order, drop silently (backtest determinism)
+        # (3) last seen price (MTM + finalize fallback)
+        self._last_price[symbol] = ev.close
 
     def on_ticker(self, ev: TickerEvent) -> None:
-        self._last_funding_rate = float(ev.funding_rate or 0.0)
+        self._last_funding_rate[ev.symbol] = float(ev.funding_rate or 0.0)
 
     def on_entry(self, signal: EntrySignal, symbol: str) -> bool:
         cfg = self._cfg
@@ -224,7 +229,7 @@ class PositionSimulator:
             return False
         if cfg.max_positions_per_symbol < 1:
             return False
-        atr = self._atr()
+        atr = self._atr(symbol)
         if atr is None or atr <= 0.0:
             logger.debug("entry rejected: ATR not ready (%s)", symbol)
             return False
@@ -250,7 +255,8 @@ class PositionSimulator:
             sl_price = entry_fill + sl_distance
             tp_price = entry_fill - cfg.tp_r_multiple * sl_distance
 
-        risk_amount = self._equity * cfg.risk_pct
+        # SORU L'': entry sizing MTM equity ile
+        risk_amount = self.equity * cfg.risk_pct
         qty = risk_amount / sl_distance
         if qty <= 0.0:
             return False
@@ -269,12 +275,22 @@ class PositionSimulator:
         )
         return True
 
-    def finalize(self, last_ts_ms: int, last_price: float) -> None:
-        if self._active is not None:
-            self._finalize_active()
+    def finalize(
+        self, last_ts_ms: int, last_prices: dict[str, float]
+    ) -> None:
+        for symbol in list(self._active.keys()):
+            self._finalize_active(symbol)
         for symbol in list(self._positions.keys()):
+            px = last_prices.get(symbol)
+            if px is None or px <= 0.0:
+                px = self._last_price.get(symbol)
+            if px is None:
+                logger.warning(
+                    "finalize: no price for %s; using entry price", symbol
+                )
+                px = self._positions[symbol].entry_price
             self._close_position(
-                symbol, last_ts_ms, last_price, ExitReason.END_OF_BACKTEST
+                symbol, last_ts_ms, px, ExitReason.END_OF_BACKTEST
             )
 
     # ---------------------------------------------------------- accessors
@@ -285,7 +301,18 @@ class PositionSimulator:
 
     @property
     def equity(self) -> float:
-        return self._equity
+        """SORU L'': portföy MTM equity (realized + unrealized)."""
+        eq = self._realized_equity
+        for sym, pos in self._positions.items():
+            px = self._last_price.get(sym)
+            if px is None:
+                continue
+            if pos.direction == Direction.LONG:
+                upnl = (px - pos.entry_price) * pos.qty
+            else:
+                upnl = (pos.entry_price - px) * pos.qty
+            eq += upnl - pos.funding_paid
+        return eq
 
     @property
     def open_positions(self) -> dict[str, _Position]:
@@ -295,10 +322,11 @@ class PositionSimulator:
         cfg = self._cfg
         trades = self._trades
         n = len(trades)
+        eq_final = self.equity
         if n == 0:
             return BacktestReport(
                 initial_equity=cfg.initial_equity,
-                final_equity=self._equity,
+                final_equity=eq_final,
                 total_trades=0,
                 win_rate=0.0,
                 avg_r_multiple=0.0,
@@ -319,11 +347,11 @@ class PositionSimulator:
             if dd > max_dd:
                 max_dd = dd
         total_return = (
-            (self._equity - cfg.initial_equity) / cfg.initial_equity
+            (eq_final - cfg.initial_equity) / cfg.initial_equity
         )
         return BacktestReport(
             initial_equity=cfg.initial_equity,
-            final_equity=self._equity,
+            final_equity=eq_final,
             total_trades=n,
             win_rate=win_rate,
             avg_r_multiple=avg_r,
@@ -336,11 +364,12 @@ class PositionSimulator:
     def _slippage_pct(self) -> float:
         return self._cfg.entry_slippage_bps / 10_000.0
 
-    def _atr(self) -> float | None:
+    def _atr(self, symbol: str) -> float | None:
         cfg = self._cfg
-        if len(self._candles) < cfg.atr_period + 1:
+        dq = self._candles.get(symbol)
+        if dq is None or len(dq) < cfg.atr_period + 1:
             return None
-        candles = list(self._candles)
+        candles = list(dq)
         start = len(candles) - cfg.atr_period
         trs: list[float] = []
         for i in range(start, len(candles)):
@@ -356,52 +385,59 @@ class PositionSimulator:
             return None
         return sum(trs) / len(trs)
 
-    def _finalize_active(self) -> None:
-        b = self._active
+    def _finalize_active(self, symbol: str) -> None:
+        b = self._active.pop(symbol, None)
         if b is None:
             return
-        self._candles.append(b)
-        self._active = None
-        self._check_exits_on_candle(b)
+        dq = self._candles.get(symbol)
+        if dq is None:
+            dq = deque(maxlen=self._candle_cap)
+            self._candles[symbol] = dq
+        dq.append(b)
+        self._check_exits_on_candle(b, symbol)
 
-    def _apply_funding(self) -> None:
-        rate = self._last_funding_rate
-        for pos in self._positions.values():
-            notional = pos.entry_price * pos.qty
-            if pos.direction == Direction.LONG:
-                pos.funding_paid += rate * notional
-            else:
-                pos.funding_paid -= rate * notional
+    def _apply_funding(self, symbol: str) -> None:
+        pos = self._positions.get(symbol)
+        if pos is None:
+            return
+        rate = self._last_funding_rate.get(symbol, 0.0)
+        notional = pos.entry_price * pos.qty
+        if pos.direction == Direction.LONG:
+            pos.funding_paid += rate * notional
+        else:
+            pos.funding_paid -= rate * notional
 
-    def _check_exits_on_candle(self, c: _Candle5s) -> None:
-        for symbol in list(self._positions.keys()):
-            pos = self._positions[symbol]
-            # entry bucket atlanır (entry close'unda açıldı; adil değil)
-            if c.sec <= pos.entry_bucket_sec:
-                continue
-            if pos.direction == Direction.LONG:
-                hit_sl = c.low <= pos.sl_price
-                hit_tp = c.high >= pos.tp_price
-                if hit_sl:
-                    # SORU D: SL önce (konservatif)
-                    self._close_position(
-                        symbol, c.ts_ms, pos.sl_price, ExitReason.SL
-                    )
-                elif hit_tp:
-                    self._close_position(
-                        symbol, c.ts_ms, pos.tp_price, ExitReason.TP
-                    )
-            else:
-                hit_sl = c.high >= pos.sl_price
-                hit_tp = c.low <= pos.tp_price
-                if hit_sl:
-                    self._close_position(
-                        symbol, c.ts_ms, pos.sl_price, ExitReason.SL
-                    )
-                elif hit_tp:
-                    self._close_position(
-                        symbol, c.ts_ms, pos.tp_price, ExitReason.TP
-                    )
+    def _check_exits_on_candle(
+        self, c: _Candle5s, symbol: str
+    ) -> None:
+        pos = self._positions.get(symbol)
+        if pos is None:
+            return
+        # entry bucket atlanır (entry close'unda açıldı; adil değil)
+        if c.sec <= pos.entry_bucket_sec:
+            return
+        if pos.direction == Direction.LONG:
+            hit_sl = c.low <= pos.sl_price
+            hit_tp = c.high >= pos.tp_price
+            if hit_sl:
+                self._close_position(
+                    symbol, c.ts_ms, pos.sl_price, ExitReason.SL
+                )
+            elif hit_tp:
+                self._close_position(
+                    symbol, c.ts_ms, pos.tp_price, ExitReason.TP
+                )
+        else:
+            hit_sl = c.high >= pos.sl_price
+            hit_tp = c.low <= pos.tp_price
+            if hit_sl:
+                self._close_position(
+                    symbol, c.ts_ms, pos.sl_price, ExitReason.SL
+                )
+            elif hit_tp:
+                self._close_position(
+                    symbol, c.ts_ms, pos.tp_price, ExitReason.TP
+                )
 
     def _close_position(
         self,
@@ -449,7 +485,7 @@ class PositionSimulator:
             pnl_net=pnl_net,
             r_multiple=r_mult,
         ))
-        self._equity += pnl_net
+        self._realized_equity += pnl_net
 
 
 def _next_funding_ts(ts_ms: int) -> int:
