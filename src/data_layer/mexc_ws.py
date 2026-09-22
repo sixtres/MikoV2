@@ -1,9 +1,14 @@
+# src/data_layer/mexc_ws.py
 # MEXC Futures WS depth + deal client.
 # Docs: wss://contract.mexc.com/edge
 #   sub.depth: {"method":"sub.depth","param":{"symbol":"BTC_USDT"}}
 #   sub.deal:  {"method":"sub.deal","param":{"symbol":"BTC_USDT"}}
 #   ping:      {"method":"ping"} every 10-15s, 60s silence = dead
 # Symbol format: BTC_USDT (underscore), futures-only.
+#
+# B3.1: dinamik subscribe/unsubscribe/subscribed_symbols eklendi.
+#       `_subscribed` set'i connect() ve dinamik abonelik tarafından
+#       yönetilir.
 
 """
 MEXC Futures WS client (public market data, no auth).
@@ -48,12 +53,15 @@ class MEXCWSClient:
         on_deal: DealCallback | None = None,
     ) -> None:
         self._last_data_mono: float = 0.0
-        self.symbols = symbols
+        self.symbols = list(symbols)
         self.on_depth = on_depth
         self.on_deal = on_deal
         self.url = url
         self.ping_interval_s = ping_interval_s
         self.dead_timeout_s = dead_timeout_s
+
+        # B3.1: dinamik abonelik takibi; connect() bunu doldurur.
+        self._subscribed: set[str] = set()
 
         self._session = None
         self._ws = None
@@ -72,6 +80,7 @@ class MEXCWSClient:
             await self._ws.send_json(
                 {"method": "sub.depth", "param": {"symbol": sym}}
             )
+            self._subscribed.add(sym)
             logger.warning("MEXC subscribed depth symbol=%s", sym)
 
         if self.on_deal is not None:
@@ -92,7 +101,7 @@ class MEXCWSClient:
                 msg = await self._ws.receive()
                 self._last_msg_mono = asyncio.get_event_loop().time()
                 if self._last_data_mono == 0.0:
-                    self._last_data_mono = self._last_msg_mono                
+                    self._last_data_mono = self._last_msg_mono
                 if msg.type.name == "TEXT":
                     await self._handle_raw(msg.data)
                 elif msg.type.name in ("CLOSE", "CLOSED", "CLOSING"):
@@ -164,6 +173,62 @@ class MEXCWSClient:
 
         # rs.sub.deal, rs.sub.depth, pong etc. ignored
 
+    # ---------------------------------------------------------- B3.1 dynamic sub
+
+    async def subscribe(self, symbol: str) -> bool:
+        """
+        Dinamik WS aboneliği (depth + varsa deal).
+        Returns:
+          True  -> yeni abonelik yapıldı
+          False -> zaten abone, WS yok veya running değil (no-op)
+        """
+        if self._ws is None or not self._running:
+            return False
+        if symbol in self._subscribed:
+            return False
+        await self._ws.send_json(
+            {"method": "sub.depth", "param": {"symbol": symbol}}
+        )
+        if self.on_deal is not None:
+            await self._ws.send_json(
+                {"method": "sub.deal", "param": {"symbol": symbol}}
+            )
+        self._subscribed.add(symbol)
+        if symbol not in self.symbols:
+            self.symbols.append(symbol)
+        logger.warning("MEXC subscribe symbol=%s", symbol)
+        return True
+
+    async def unsubscribe(self, symbol: str) -> bool:
+        """
+        Dinamik WS abonelik iptali (depth + varsa deal).
+        Returns:
+          True  -> iptal edildi
+          False -> abone değildi, WS yok veya running değil (no-op)
+        """
+        if self._ws is None or not self._running:
+            return False
+        if symbol not in self._subscribed:
+            return False
+        await self._ws.send_json(
+            {"method": "unsub.depth", "param": {"symbol": symbol}}
+        )
+        if self.on_deal is not None:
+            await self._ws.send_json(
+                {"method": "unsub.deal", "param": {"symbol": symbol}}
+            )
+        self._subscribed.discard(symbol)
+        try:
+            self.symbols.remove(symbol)
+        except ValueError:
+            pass
+        logger.warning("MEXC unsubscribe symbol=%s", symbol)
+        return True
+
+    def subscribed_symbols(self) -> frozenset[str]:
+        """Kopya döner; iç set sızdırılmaz."""
+        return frozenset(self._subscribed)
+
     async def close(self) -> None:
         self._running = False
         for task in (self._read_task, self._ping_task):
@@ -189,3 +254,4 @@ class MEXCWSClient:
             except Exception:
                 pass
             self._session = None
+        self._subscribed.clear()

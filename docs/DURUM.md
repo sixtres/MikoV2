@@ -1,13 +1,12 @@
 MikoV2 — DURUM
-Versiyon: v2.12
-Tarih: 2026-09-21
-Durum: B2e TÜM ALT FAZLAR KAPANDI. B2e.1 (11 test) + B2e.1S (8 test) +
-       B2e.2 (11 test) + B2e.2S (4 test) + B2e.3 (24 test) tamamlandı.
-       Toplam 842 PASS. B2e kapanış commit'i bekliyor (tek commit).
-       Sıradaki: B3.1 (çok-sembol kolektör — Top5 WS + Top10 watch).
-Sıradaki: B3.1 + B2e kapanış commit'i. B3.1 B2e.2 ile paralel
-          başlatılabilir; 30 günlük veri birikim saati B2e.real gate
-          için (SORU S′) gerekli.
+Versiyon: v2.14
+Tarih: 2026-09-22
+Durum: B3.1 (çok-sembol kolektör — Top5 WS + Top10 watch) KAPANDI.
+       856 PASS + 1 bilinen transient FAIL (§2 not). Tek commit atıldı
+       (<COMMIT_HASH>). PROTOKOL.md v3.4 yürürlükte (v3.3 + v3.4
+       kümülatif; v3.2'den türetildi). B3.2 sırada.
+Sıradaki: B3.2 — Micro-trigger canlı (WS tick -> detector -> signal ->
+          strategy). SORU SS=C sırası: B3.2 → B3.3 → B3.4 → B3.5.
 Amaç: Yeni sohbete başlarken bağlamı hızlıca aktarmak.
 PO: Eser Göbekli
 Önceki: REV7 (FAZ 6/7/8 kapanış) → REV9 (dashboard + universe + shadow
@@ -22,8 +21,13 @@ BAŞLAMADI) → v2.11 (B2e.−1 + B2e.0 kapandı: §6.1/§6.2 compliance +
 multi-symbol altyapı; 783 PASS; SORU X açıldı) → v2.12 (B2e tüm alt
 fazlar kapandı: B2e.1 + B2e.1S + B2e.2 + B2e.2S + B2e.3; 842 PASS;
 CLI --mode single|multi|walkforward + --data-quality-profile;
-multi_report.py G′ şeması; SORU X/Z/Y/3/LL/MM/NN/OO/PP/QQ/RR/SS/TT/
-UU/VV/WW/XX/YY/ZZ/AA′/BB′/A1/A2/A3 kilitli)
+multi_report.py G′ şeması) → v2.13 (B3.1 plan Mod 1'de onaylandı;
+SORU A–G kilitli; PROTOKOL.md v3.2 yürürlükte; Mod 2 için dosya
+istekleri sırada) → v2.14 (B3.1 kapandı: mexc_ws dinamik sub;
+universe_service rotation Q1–Q5 dış-ajan sentezi ile; runner
+çok-sembol; iki timer; watch REST ticker; per-symbol watchdog;
+856 PASS + 1 bilinen transient FAIL; §6.8 yeni ihlal notu; PROTOKOL.md
+v3.4; tek commit B3.1 kapanış)
 
 0. ÇALIŞMA YÖNTEMİ
 MikoV2 — MEXC Futures (vadeli) kripto trading botu. Kağıt-öncelikli
@@ -39,10 +43,11 @@ gerekiyor.
 Geliştirme döngüsü: Local'de (Windows/PS) kodlama ve test (pytest),
 VM'de (eser_gobekli@mikov2-collector-1) çalıştırma.
 GitHub base URL: https://github.com/sixtres/MikoV2 (dosya isteme
-protokolü için referans; Bkz Protokol §6).
-Devir protokolü: SOHBET-KAPANIS-PROTOKOLU.md (projeden bağımsız yöntem
-dökümanı; detay için Bkz Protokol §6). Devir sırasında sadece bu dosya
-(DURUM.md) güncellenir; protokol sabit kalır.
+protokolü için referans; Bkz PROTOKOL.md §6).
+Devir protokolü: PROTOKOL.md v3.4 (projeden bağımsız yöntem dökümanı;
+detay için Bkz PROTOKOL.md §6). Devir sırasında sadece bu dosya
+(DURUM.md) güncellenir; PROTOKOL.md sabit kalır. Eski
+SOHBET-KAPANIS-PROTOKOLU.md v2.6 ezildi.
 DB yolu (VM): /home/eser_gobekli/MikoV2/data/mikov2.sqlite
 DB şeması: orderbook_snapshots (id PK), trades_ohlcv_1s (sec PK),
 tickers_snapshot (id PK)
@@ -73,28 +78,34 @@ Not: transfer.sh, 0x0.st kapalı/kısıtlı (2026-09-19 itibariyle).
 | B2c|Position simulator + PnL (16 test)|Kapandı|
 | B2d|Backtest raporlama (17 test)|Kapandı|
 | B2e.−1|§6.1 funding ceza + §6.2 emtia exclude (15 test)|Kapandı|
-| B2e.0|Multi-symbol altyapı: event symbol + source_seq + stream_multi + per-symbol sim state + finalize dict + MTM + data_quality (18 test)|Kapandı|
-| B2e.1|Interleaved runner (MultiSymbolRunner) + J′ + K′′ drops + per-symbol strategy/detector + last_rejection_reason (SORU X) (11 test)|Kapandı|
+| B2e.0|Multi-symbol altyapı (18 test)|Kapandı|
+| B2e.1|Interleaved runner (11 test)|Kapandı|
 | B2e.1S|Synthetic multi-symbol validation (8 test)|Kapandı|
-| B2e.2|Walk-forward (WalkForwardRunner, SORU D/I/M/Q′) + window_id/fold_id (11 test)|Kapandı|
-| B2e.2S|Synthetic walk-forward (fold aritmetiği, 4 test)|Kapandı|
-| B2e.3|Rapor (multi_report.py, G′ şeması + data_quality profilleri + dropped aggregation + excluded_symbols) + CLI --data-quality-profile (24 test)|Kapandı|
-| B2e kapanış|Tek commit (tüm alt fazlar)|SIRADAKİ|
-| B3.1|Çok-sembol kolektör (Top5 WS + Top10 watch)|Sırada|
+| B2e.2|Walk-forward (11 test)|Kapandı|
+| B2e.2S|Synthetic walk-forward (4 test)|Kapandı|
+| B2e.3|Rapor (G′ şeması + profiller + CLI) (24 test)|Kapandı|
+| B2e kapanış|Tek commit|Kapandı (2026-09-22)|
+| B3.1|Çok-sembol kolektör (Top5 WS + Top10 watch)|Kapandı (2026-09-22)|
 | B2e.real|Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
-| B3.2–4|Micro-trigger canlı + position manager (paper) + alert (SORU SS=C)|Sırada|
+| B3.2|Micro-trigger canlı (WS tick -> detector -> signal -> strategy)|Sırada (Mod 1)|
+| B3.3–5|Position manager paper + alert + sigorta (SORU SS=C)|Sırada|
 
 2. TEST DURUMU
-Toplam: 842 test PASS.
+Toplam: 856 PASS + 1 bilinen transient FAIL.
 Alt faz dağılımı: B2d 17; B2e.−1 15; B2e.0 18; B2e.1 11; B2e.1S 8;
-B2e.2 11; B2e.2S 4; B2e.3 24.
+B2e.2 11; B2e.2S 4; B2e.3 24; B3.1 15 (8 unit + 7 integration).
 Komut: pytest tests/ -q --tb=short --maxfail=1
+Bilinen transient FAIL: tests/chaos/test_queue_full.py:168
+  (test_drop_oldest_preserves_newest veya test_telemetry_1_by_1_eviction;
+  §6.3'te belgelenen mp.Queue feeder timing kaynaklı; izole koşularda
+  ve tekrar koşularda temiz. B3.1 kapanışını etkilemez.)
 Yakalanan kritik bug'lar: WS dead silent (pong data maskesi), mp.Queue
 blocking event loop, DROP_OLDEST -> DROP_NEWEST race, 429 circuit
 breaker eksikliği, SWEEP yön mapping tersliği (Bkz §7), SORU G/H
 slippage/SL floor (B2c, Bkz §7), B2e.0 `PositionSimulator.finalize`
 imza değişikliği sonrası `backtest_run.py` çağrısı kırıldı (B2e.3'te
-düzeltildi).
+düzeltildi), B3.1 adım 1 `...` işaretleyicisi kaynaklı `__init__`
+attribute kaybı (Bkz §6.8).
 Not: test_drop_oldest_preserves_newest ve
 test_telemetry_1_by_1_eviction (tests/chaos/test_queue_full.py) full-
 suite yükü altında mp.Queue feeder timing kaynaklı tekil/transient
@@ -111,7 +122,9 @@ Tickers — tickers_snapshot (60s interval, OI + funding)
 WS data-starvation watchdog aktif (90s data gelmezse restart).
 Veritabanı: Bkz §0 (WAL mode).
 Dashboard: http://<VM_IP>:8090/ (aiohttp.web, 7 endpoint, Chart.js)
-Not: Kolektör şu an tek sembol (BTC_USDT). Çok-sembol genişleme B3.1.
+Not: Kolektör şu an tek sembol (BTC_USDT). Çok-sembol genişleme B3.1
+Mod 2'de kod olarak hazır; VM'de aktivasyon `--enable-rotation`
+flag'ine bağlı; aktivasyon kararı B3.2 öncesi PO onayına tabi.
 
 DB MEVCUT DURUM (2026-09-21):
 - trades_ohlcv_1s: BTC_USDT tek sembol, 332216 satır, span 347517 sn
@@ -125,10 +138,11 @@ DB MEVCUT DURUM (2026-09-21):
 4. KRİTİK MODÜLLER
 | Modül|Görev|
 | ---|---|
-| src/data_layer/mexc_ws.py|sub.depth + sub.deal WS + watchdog|
+| src/data_layer/mexc_ws.py|sub.depth + sub.deal WS + watchdog; B3.1: dinamik subscribe/unsubscribe/subscribed_symbols|
 | src/data_layer/mexc_rest.py|Snapshot + contract_size + funding|
 | src/data_layer/metrics_fetcher.py|1176 sembol bulk filtre + skorlama (§6.1 funding ceza; excluded_symbols DI)|
-| src/data_layer/universe_service.py|Universe scan orkestrasyonu (§6.2 exclude + ScanResult.excluded_symbols)|
+| src/data_layer/universe_service.py|Universe scan orkestrasyonu (§6.2 exclude + ScanResult.excluded_symbols); B3.1: RotationDecision + hysteresis + flap (round-trip) + üstel quarantine + 7 gün stabil reset|
+| src/data_layer/l2_buffer.py|Çok-sembol L2 book buffer (L2Book per symbol)|
 | src/data_layer/constants.py|EXCLUDED_SYMBOLS + EXCLUDED_SYMBOLS_VERSION (§6.2 kanonik liste)|
 | src/storage/mark_price_cache.py|WS -> REST mark price cache|
 | src/storage/equity_tracker.py|60s + close-triggered equity snap|
@@ -139,10 +153,11 @@ DB MEVCUT DURUM (2026-09-21):
 | src/backtest/signal_detector.py|SWEEP/MSS/FVG/OTE tespiti (5s)|
 | src/backtest/strategy.py|Sinyalleri entry kararına dönüştürür; SORU X — last_rejection_reason (additive)|
 | src/backtest/position_sim.py|B2c entry/TP/SL + PnL; B2e.0 per-symbol state + finalize dict + MTM; SORU N — window_id/fold_id|
-| src/backtest/multi_symbol_runner.py|B2e.1 — MultiSymbolRunner (interleaved); B2e.2 — WalkForwardRunner + WalkForwardConfig + FoldWindow + FoldResult + WalkForwardResult|
-| src/backtest/multi_report.py|B2e.3 — G′ rapor şeması; SCHEMA_VERSION=1; CLAIM_* enum; build_report saf fonksiyon; data_quality{profile, by_symbol, aggregate}; dropped_entries_by_reason/by_symbol (SORU A3); excluded_symbols{all, effective, version} (SORU BB′)|
+| src/backtest/multi_symbol_runner.py|B2e.1 MultiSymbolRunner (interleaved); B2e.2 WalkForwardRunner + WalkForwardConfig + FoldWindow + FoldResult + WalkForwardResult|
+| src/backtest/multi_report.py|B2e.3 — G′ rapor şeması; SCHEMA_VERSION=1; CLAIM_* enum; build_report saf fonksiyon; data_quality{profile, by_symbol, aggregate}; dropped_entries_by_reason/by_symbol (SORU A3); excluded_symbols{all, effective, version} (SORU BB′)|m
 | src/backtest/reporting.py|B2d — genişletilmiş rapor (Sharpe, PF, expectancy, equity curve)|
 | src/backtest/data_quality.py|B2e.0 — gap/completeness detection; B2e.3 — ticker/depth coverage da bu fonksiyonla (SORU XX)|
+| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation|
 | tests/manual/backtest_run.py|Backtest CLI: --symbol (single); --symbols + --mode (multi|walkforward); --train-ms/--test-ms/--step-ms; --data-quality-profile (legacy|lenient|strict); --config-a/b; --equity-csv; --report|
 
 5. UNIVERSE SCANNER KARARI
@@ -194,23 +209,53 @@ eleman tahliye eder. DROP_OLDEST semantiği dar bir yarış penceresinde
 DROP_NEWEST davranışına sapar.
 Etki alanı: Sadece threaded_bridge=True (production default). Testler
 threaded_bridge=False kullandığı için bu yol test kapsamı dışı.
-Karar: FAZ sonrası — B2c/B2d/B2e kapsamı dışı, ayrı commit.
+Karar: FAZ sonrası — B2c/B2d/B2e/B3 kapsamı dışı, ayrı commit.
 Doğrulama: KOD İNCELEME (2026-09-20).
 Durum: Not edildi, FAZ sonrasına bırakıldı. Full suite koşularında
 test_drop_oldest_preserves_newest ve test_telemetry_1_by_1_eviction
-ara sıra FAIL (transient). İzole koşularda temiz. B2e kapsamı dışı.
+ara sıra FAIL (transient). İzole koşularda temiz.
 
 6.4 SORU X — K′′ diagnostics (KAPANDI)
 Karar: (A) — Strategy + PositionSimulator'a additive
 last_rejection_reason alanı; cooldown_active / per_symbol_max_position
 / global_limit_full reason'ları set edilir.
-Durum: KAPANDI (B2e.1, 2026-09-21). Test: tests/unit/test_backtest_multi.py.
+Durum: KAPANDI (B2e.1, 2026-09-21).
 
 6.5 B2e kapanış commit'i
-Sorun: B2e plan kararları (SORU A′–W) PO kısıtı gereği tek final
-commit istiyor. Alt fazlarda commit YOK.
-Durum: Bekliyor — B2e.1 + B2e.1S + B2e.2 + B2e.2S + B2e.3 kapandı,
-commit sırada. Commit mesajı tüm alt fazları listeleyecek.
+Sorun: B2e plan kararları PO kısıtı gereği tek final commit istiyordu.
+Durum: KAPANDI — tek commit atıldı (2026-09-22).
+
+6.6 PROTOKOL İHLALİ NOTU (2026-09-22)
+Asistan, dış-ajan prompt mesajında PROTOKOL.md §7.1 ihlali yaptı:
+çıktı bloğu (4-backtick prompt) checklist'ten ÖNCE verildi. §7.1
+"checklist kodun/dökümanın üstünde" der; §7.3 format örneği aynı
+sırayı ima eder. PO ihlali fark etti; asistan kabul etti; çıktı
+doğru sırayla yeniden verildi. Protokol hatası DEĞİL; asistan
+sıralama hatası. Sonraki çıktılarda checklist önce zorunlu;
+denetim sıkılaştırıldı. Kayıt amacıyla not edildi.
+(§10.1 — Mod 1, PO yazdı.)
+
+6.7 DURUM.md → PROTOKOL.md geçişi
+Sorun: Eski çalışma seti SOHBET-KAPANIS-PROTOKOLU.md v2.6 (proje-
+spesifik) kullanıyordu. PROTOKOL.md evrensel sürüm yürürlükte
+(v3.2 → v3.3 → v3.4 kümülatif).
+Karar: SOHBET-KAPANIS-PROTOKOLU.md v2.6 ezildi; tüm atıflar
+PROTOKOL.md'ye geçti. Proje dosya seti: DURUM.md + PROTOKOL.md +
+MikoV2-AnaYasa-REV5.md (ANAYASA rolü) + MikoV2-Proje-Tum-
+Moduller-REV5.md (mimari referans, opsiyonel).
+Durum: UYGULANDI (v2.13); PROTOKOL.md v3.4 aktif (v2.14).
+
+6.8 PROTOKOL İHLALİ NOTU (2026-09-22, B3.1 Mod 2)
+Asistan, B3.1 adım 1 mexc_ws.py tesliminde "Yeni hali" patch bloğunda
+`...` işaretleyicisi kullandı. PO patch'i literal uyguladığı için
+MEXCWSClient.__init__ içindeki 6 attribute ataması (on_depth, url,
+ping_interval_s, dead_timeout_s, _read_task, _ping_task) düştü; 7 test
+FAIL (test_mexc_ws 4, test_ws_ping_timeout 3). Asistan hatayı kabul
+etti; mexc_ws.py tam dosya olarak yeniden teslim edildi. Ders: kısmi
+patch'te `...` yerine gerçek satırlar yazılmalı veya tam dosya
+verilmeli. PO kararı: bundan sonra `...` yasak; ayrıca Eski/Yeni
+hali bloklarında dosya yolu yorumu yazılmaz (kopyala-yapıştır
+akışına uygunluk). (§10.1 — Mod 1, asistan.)
 
 7. BACKTEST İLERLEME
 | İş|Durum|
@@ -227,74 +272,44 @@ commit sırada. Commit mesajı tüm alt fazları listeleyecek.
 | B2e.2 — Walk-forward|Kapandı (11 test)|
 | B2e.2S — Synthetic walk-forward|Kapandı (4 test)|
 | B2e.3 — Rapor (G′/N/diagnostics)|Kapandı (24 test)|
-| B2e kapanış — Tek commit|SIRADAKİ|
-| B3.1 — Çok-sembol kolektör|Sırada|
+| B2e kapanış — Tek commit|Kapandı (2026-09-22)|
+| B3.1 — Çok-sembol kolektör|Kapandı (2026-09-22)|
 | B2e.real — Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
 
-B2e.1 kapsamı (kapandı):
-- src/backtest/multi_symbol_runner.py (YENİ): MultiSymbolRunner
-  (interleaved, SORU C); per-symbol Strategy/SignalDetector; tek
-  PositionSimulator; K′′ dropped_entries (reason + symbol + ts_ms)
-  toplama; cooldown_active transition-only kayıt (epizod başı).
-- strategy.py + position_sim.py: SORU X — last_rejection_reason
-  additive alan + property.
-- tests/unit/test_backtest_multi.py (YENİ, 11 test): interleaved
-  determinizm, J′ tie-break (ts_ms, event_type_rank, symbol,
-  source_seq), global limit drop, per-symbol izolasyon, K′′ reason'ları.
+B2e.1 kapsamı (kapandı): MultiSymbolRunner (interleaved); per-symbol
+Strategy/SignalDetector; tek PositionSimulator; K′′ dropped_entries;
+cooldown_active transition-only.
 
-B2e.1S kapsamı (kapandı):
-- tests/unit/test_backtest_multi_symbol_synthetic.py (YENİ, 8 test):
-  sentetik minimum (SORU 3=B); SORU R 1–14'ün kritik alt kümesi.
-  Kalan 6 senaryo B2e.2S'ye ertelendi.
+B2e.1S kapsamı (kapandı): sentetik minimum (SORU 3=B).
 
-B2e.2 kapsamı (kapandı):
-- multi_symbol_runner.py: WalkForwardConfig, FoldWindow, FoldResult,
-  WalkForwardResult, WalkForwardRunner (SORU D/I/M + AA/BB/CC/DD/JJ).
-- position_sim.py: Trade'a window_id + fold_id (SORU N); PositionSimulator
-  constructor'a window_id/fold_id.
-- multi_symbol_runner.py: MultiSymbolRunner._seen_ohlcv_secs (fold
-  data_quality için).
-- tests/unit/test_backtest_walkforward.py (YENİ, 11 test): fold üretimi,
-  ≥1 fold, fail-fast (exception + callback_errors), determinizm.
+B2e.2 kapsamı (kapandı): WalkForwardConfig + FoldWindow + FoldResult
++ WalkForwardResult + WalkForwardRunner; Trade.window_id/fold_id.
 
-B2e.2S kapsamı (kapandı):
-- test_backtest_walkforward.py (+4 test): LL senaryoları — step>test,
-  step≤0 default (SORU A1=A / I.2=A), çok-fold determinizm,
-  boundary-gap algılama.
+B2e.2S kapsamı (kapandı): step>test, step≤0 default, çok-fold
+determinizm, boundary-gap.
 
-B2e.3 kapsamı (kapandı):
-- src/backtest/multi_report.py (YENİ): SCHEMA_VERSION=1;
-  CLAIM_CAPABLE/SYNTHETIC_VALIDATED/SINGLE_SYMBOL_REAL/
-  MULTI_SYMBOL_REAL enum; build_report(payloads, *, schema_version,
-  profile, symbols, synthetic_validated, excluded_symbols_all,
-  excluded_symbols_version, requested_symbols, ohlcv_secs_by_symbol,
-  ticker_secs_by_symbol, depth_secs_by_symbol) → dict; profil eşikleri
-  (strict=S′, lenient=%85/60dk, legacy=eşik yok); strict fail-fast →
-  RuntimeError; coverage için analyze_ohlcv_secs caller sözleşmesi
-  (sorted(set(secs))); G′ şeması + A3 dropped aggregation + BB′
-  excluded_symbols; source passthrough (payloads).
-- src/backtest/replay_transport.py: collect_ticker_secs +
-  collect_depth_secs (B2e.3).
-- src/backtest/position_sim.py: SORU N — Trade.window_id +
-  Trade.fold_id; PositionSimulator(*, window_id, fold_id).
-- tests/manual/backtest_run.py:
-    * KRİTİK FIX: sim.finalize(last_prices={symbol: price}) — B2e.0
-      imza değişikliği sonrası kırılmıştı.
-    * --mode single|multi|walkforward (SORU TT=B)
-    * --symbols, --train-ms, --test-ms, --step-ms (SORU II=A)
-    * --data-quality-profile legacy|lenient|strict (SORU AA′=A)
-    * build_report entegrasyonu (single + multi + walkforward)
-    * _collect_coverage_secs (ohlcv + ticker + depth)
-- tests/unit/test_backtest_multi_report.py (YENİ, 24 test):
-  sabitler, build_report temel, dropped aggregation, coverage XX,
-  profiller YY, excluded BB′, claim ZZ, gaps budama.
+B2e.3 kapsamı (kapandı): multi_report.py (SCHEMA_VERSION=1;
+CLAIM_CAPABLE/SYNTHETIC_VALIDATED/SINGLE_SYMBOL_REAL/
+MULTI_SYMBOL_REAL; build_report; data_quality profilleri;
+dropped_entries_by_reason/by_symbol; excluded_symbols{all, effective,
+version}); CLI --mode single|multi|walkforward + --data-quality-profile;
+collect_ticker_secs + collect_depth_secs.
+
+B3.1 kapsamı (kapandı): mexc_ws.py dinamik subscribe/unsubscribe/
+subscribed_symbols; universe_service.py RotationDecision + hysteresis
+(zaman) + flap (sayı, Q2=B round-trip) + üstel quarantine (SORU A
+1h→4h→24h) + Q3=B 7 gün stabil reset; runner.py çok-sembol state +
+iki timer (30s scan / 5dk WS rotasyon, SORU B=D) + watch REST ticker
+(SORU D=A) + per-symbol watchdog + Top5→Top4 manuel onay uyarısı
+(SORU F=C); seed_subscriptions (Q4=B yalnız süreç başlangıcı);
+--symbols + --enable-rotation CLI.
 
 CLI örnek kullanımı:
-    # Single (B2c/B2d emsali; geriye uyumlu)
+    # Single
     python -m tests.manual.backtest_run --db data/mikov2.sqlite \
         --symbol BTC_USDT --entry-window-ms 300000 --cooldown-ms 60000 \
         --report b2e3_single.json
-    # Walk-forward (SORU T kapanış kriteri)
+    # Walk-forward
     python -m tests.manual.backtest_run --db data/mikov2.sqlite \
         --mode walkforward --symbols BTC_USDT \
         --train-ms 172800000 --test-ms 86400000 \
@@ -303,6 +318,9 @@ CLI örnek kullanımı:
     python -m tests.manual.backtest_run --db data/mikov2.sqlite \
         --symbol BTC_USDT --data-quality-profile strict \
         --report should_fail.json
+    # Shadow (B3.1 çok-sembol + rotation)
+    python -m tests.shadow.runner --symbols BTC_USDT,SOL_USDT \
+        --db data/mikov2.sqlite --enable-rotation
 
 B2e.3 çıktı örnekleri (BTC_USDT 97.8h, 2026-09-21):
 - single mode → 44 trade, -%17.98; data_quality.aggregate.completeness
@@ -310,29 +328,20 @@ B2e.3 çıktı örnekleri (BTC_USDT 97.8h, 2026-09-21):
   (raw %149 — collector_rate_anomaly=True); walk_forward_claim =
   capable.
 - walkforward mode (train=48h, test=24h) → 2 fold, 2 combined trade,
-  1 combined drop; walk_forward_claim = single_symbol_real
-  (SORU T).
+  1 combined drop; walk_forward_claim = single_symbol_real.
 - strict profil → RuntimeError:
-  'strict_violated:completeness=0.9152,max_gap_ms=14572000'
-  (BTC_USDT max gap 4.05h > 30 dk).
+  'strict_violated:completeness=0.9152,max_gap_ms=14572000'.
 
 B2c SONRASI ANALİZ (2026-09-20, BTC_USDT, 97.8 saat):
-Config: --entry-window-ms 300000 --cooldown-ms 60000 (üç kapı True).
-Sonuç: 187 entry → 44 tamamlanan trade.
-Exit dağılımı: 9 TP (R=+2.00) / 34 SL (R=-1.00) / 1 END_OF_BACKTEST
-(R=-0.55).
-win_rate = %20.45 (9/44).
-avg_r_multiple = -0.3761.
-max_drawdown_pct = %20.08.
-total_return_pct = -%17.98 (final_equity 8201.82 / initial 10000).
-Funding etkisi (--include-funding): ≈ 0 USDT.
-BULGU: Bu 97.8 saatlik BTC örneklemde strateji kârlı değil. Breakeven
-%33.3; ölçülen %20.45 altında.
+187 entry → 44 tamamlanan trade. 9 TP / 34 SL / 1 END_OF_BACKTEST.
+win_rate = %20.45. avg_r_multiple = -0.3761. max_drawdown_pct =
+%20.08. total_return_pct = -%17.98. Funding etkisi ≈ 0 USDT.
+BULGU: Bu örneklemde strateji kârlı değil. Breakeven %33.3; ölçülen
+%20.45 altında.
 YORUM: Sample size küçük (44 trade), tek rejim, tek sembol. B2e
-(multi-symbol walk-forward) karar için gerekli. B2e sonuçları: tek
-sembol walk-forward 2 fold, 2 trade, hepsi SL — örneklem çok küçük;
-B3.1 çok-sembol kolektör ile veri birikince B2e.real gate karar
-verecek.
+sonuçları: tek sembol walk-forward 2 fold, 2 trade, hepsi SL —
+örneklem çok küçük; B3.1 çok-sembol kolektör ile veri birikince
+B2e.real gate karar verecek.
 
 B2c SORU G/H:
 SORU G: (C) min_sl_distance_pct=0.002 floor.
@@ -346,51 +355,37 @@ SORU C: (B) Equity curve JSON + CSV (--equity-csv); PNG yok.
 Yeni dosya: src/backtest/reporting.py.
 
 8. B2e — FAZ KIRILIMI VE DURUM
-- B2e.−1 — §6.1 + §6.2 compliance. KAPANDI (15 test).
-- B2e.0 — Altyapı. KAPANDI (18 test).
-- B2e.1 — Multi-symbol davranış: MultiSymbolRunner (interleaved),
-  SORU X (A) last_rejection_reason, K′′ drops. KAPANDI (11 test).
-- B2e.1S — Synthetic multi-symbol validation (minimum; SORU 3=B).
-  KAPANDI (8 test).
-- B2e.2 — Walk-forward: WalkForwardRunner, SORU D/I/M/Q′, window_id/
-  fold_id. KAPANDI (11 test).
-- B2e.2S — Synthetic walk-forward (fold aritmetiği, LL 4 senaryo).
-  KAPANDI (4 test).
-- B2e.3 — Rapor: multi_report.py (G′ + diagnostics + data_quality
-  profilleri + A3 aggregation + BB′ excluded + ZZ claim).
-  KAPANDI (24 test).
-- B2e kapanış — Tek commit. SIRADAKİ.
-- B2e.real — Gerçek çok sembol gate (S′); veri birikimine bağlı.
+TÜM ALT FAZLAR KAPANDI (2026-09-22):
+- B2e.−1: §6.1 + §6.2 compliance (15 test).
+- B2e.0: Altyapı (18 test).
+- B2e.1: Multi-symbol davranış — MultiSymbolRunner (11 test).
+- B2e.1S: Synthetic multi-symbol validation (8 test).
+- B2e.2: Walk-forward — WalkForwardRunner (11 test).
+- B2e.2S: Synthetic walk-forward (4 test).
+- B2e.3: Rapor (24 test).
+- B2e kapanış: Tek commit atıldı.
+- B2e.real: Gerçek çok sembol gate (S′) — veri birikimine bağlı.
 
-Commit politikası: PO kısıtı gereği tek final commit (B2e kapanışında).
-Alt faz sonlarında commit YOK. Final commit mesajı B2e.−1 + B2e.0 +
-B2e.1 + B2e.1S + B2e.2 + B2e.2S + B2e.3'ü listeleyecek.
+Commit politikası: PO kısıtı gereği B2e tek final commit. Yeni
+fazlarda (B3.1, B3.2) yine tek commit.
 
 9. SIRADAKİ FAZLAR
-B2e kapanış commit'i → B3.1 (çok-sembol kolektör, Top5 WS + Top10
-watch) → B3.2–4 (micro-trigger canlı + position manager paper + alert,
+B3.2 (Mod 1 sırada) → B3.3–5 (position manager paper + alert,
 SORU SS=C sırası) → B2e.real (S′ gate, 30 gün veri birikiminden sonra
 otomatik değerlendirme).
-B2e sonrası: strateji parametre optimizasyonu — B2e.real sonuçlarına
-göre. Kârlılık negatif kalırsa öncelik strateji adayı iterasyonuna
-kayar (B3 gerçek-para adımı bloklanır).
-
-Örnek kullanım (B2e.3 CLI):
-    python -m tests.manual.backtest_run --db data/mikov2.sqlite \
-        --symbol BTC_USDT --entry-window-ms 300000 --cooldown-ms 60000 \
-        --report b2e3_single.json
-    python -m tests.manual.backtest_run --db data/mikov2.sqlite \
-        --mode walkforward --symbols BTC_USDT \
-        --train-ms 172800000 --test-ms 86400000 \
-        --report wf_b2e3.json
+B3.2 sonrası: strateji parametre optimizasyonu — B2e.real
+sonuçlarına göre. Kârlılık negatif kalırsa öncelik strateji adayı
+iterasyonuna kayar (B3 gerçek-para adımı bloklanır).
 
 10. PROD İÇİN SONRAKİ ADIMLAR (B3)
 SORU SS (C) sırası:
-B3.1 — Çok-sembol kolektör: Top5 WS bağlı (tam depth + OHLCV + ticker),
-Top10 watch. Universe scanner mevcut (Top20); rotasyonda WS abonelik
-güncellenir. Hysteresis 5m/flap 3 yumuşatıcı. e2-micro CPU/RAM/DB
-ilk hafta izlenir; aşılırsa Top5→Top4 daralması S′ ≥4 koşuluyla uyumlu.
-B3.2 — Micro-trigger canlı (WS tick -> detector -> signal -> strategy).
+B3.1 — Çok-sembol kolektör: Top5 WS bağlı (tam depth + OHLCV +
+ticker), Top10 watch. Universe scanner mevcut (Top20); rotasyonda
+WS abonelik güncellenir. Hysteresis 5m/flap 3 yumuşatıcı. e2-micro
+CPU/RAM/DB ilk hafta izlenir; aşılırsa Top5→Top4 daralması S′ ≥4
+koşuluyla uyumlu. (KAPANDI 2026-09-22.)
+B3.2 — Micro-trigger canlı (WS tick -> detector -> signal ->
+strategy). (Sırada.)
 B3.3 — Position manager paper (canlı canlı paper trading).
 B3.4 — Alert entegrasyonu (Telegram/Discord).
 B3.5 — Sigorta: 3-4 hafta paper trading -> gerçek para (alert
@@ -401,59 +396,98 @@ Git/checkpoint:
 Güvenilmeyen commit'ler local'de reset, remote'a force-push ile
 silinir. Önceki checkpoint: 7fb827848aee38897fcea9616d4ea898c294089a
 (REV9 DURUM + BAĞLAM, 2026-09-17).
-Bu oturum checkpoint'i: <COMMIT_HASH> (B2e kapanışı; commit henüz
-atılmadı).
+Bu oturum checkpoint'i: <COMMIT_HASH> (B3.1 kapanış, 2026-09-22).
 Protokol = yöntem, DURUM = içerik. Devir sırasında sadece bu dosya
-güncellenir; SOHBET-KAPANIS-PROTOKOLU.md sabit kalır.
+güncellenir; PROTOKOL.md sabit kalır.
 B2d çoklu config: --config-a / --config-b.
 B2d equity curve: JSON + CSV; PNG yok (SORU C: (B)).
 §6.1 funding ceza + §6.2 emtia exclude: UYGULANDI (B2e.−1).
 B2e plan kararları (SORU A′–W, tam liste §16): B2e.0/1/1S/2/2S/3/real
 faz kırılımı; commit tek.
-SORU X: KAPANDI (A) — Strategy + PositionSimulator.last_rejection_reason
-(additive).
-SORU Z: KAPANDI (B) — SORU R senaryo listesi B2e.1S'de önerildi;
-içerik kilitli §16'ya eklendi (v1).
-SORU Y: KAPANDI — test sayısı tutarlılık yanılgısı; doğru sayı
-arşivlendi.
+SORU X: KAPANDI (A) — Strategy + PositionSimulator.last_rejection_reason.
+SORU Z: KAPANDI (B) — SORU R senaryo listesi B2e.1S'de önerildi.
+SORU Y: KAPANDI — test sayısı tutarlılık yanılgısı.
 SORU 3 (dış ajan): sentetik doğrulama minimum + B3.1 paralel + B2e.2
 odak.
-SORU LL (A): B2e.2S 4 senaryo — step>test / step≤0 default / çok-fold
-determinizm / boundary-gap.
-SORU A1 (A): step≤0 → test_ms default (I.2 uyumlu; fail-fast değil).
+SORU LL (A): B2e.2S 4 senaryo.
+SORU A1 (A): step≤0 → test_ms default.
 SORU MM (A): CLI diff için PO backtest_run.py paylaşır.
-SORU NN (A): tek --report JSON (EE=A uyumlu).
+SORU NN (A): tek --report JSON.
 SORU OO (B): strict = S′ (≥%95, ≤30dk, fail-fast); lenient = ≥%85,
 ≤60dk (WARNING); legacy = eşik yok.
-SORU A2 (A): 3 profil — strict (S′, B2e.real gate), lenient (WARNING),
-legacy (eşik yok; BTC_USDT kapanışı legacy ile koşar).
-SORU PP (C): dropped_entries raw + reason×symbol sayımı; oran ertelenir.
-SORU A3 (B): dropped_entries_by_reason + dropped_entries_by_symbol
-üst anahtar; schema_version bump.
+SORU A2 (A): 3 profil — strict/lenient/legacy.
+SORU PP (C): dropped_entries raw + reason×symbol sayımı.
+SORU A3 (B): dropped_entries_by_reason + dropped_entries_by_symbol.
 SORU QQ (A): B2e kapanış kriteri = capable + synthetic validated +
 single-symbol real walk-forward (SORU T).
 SORU RR (A): B3.1 çok-sembol kolektör — Top5 WS + Top10 watch.
 SORU SS (C): B3.2–4 sırası micro-trigger → position manager → alert.
-SORU TT (B): --mode single|multi|walkforward (açık anahtarlama).
+SORU TT (B): --mode single|multi|walkforward.
 SORU UU (A): build_report saf fonksiyon.
-SORU VV (A): SCHEMA_VERSION = 1 (modül sabiti; additive değişiklikte
-artır).
-SORU WW (C): data_quality{profile, by_symbol, aggregate}; profile
-aggregate'te tek kez.
-SORU XX (B): coverage = analyze_ohlcv_secs(secs, expected_interval_sec);
-caller sorted(set(secs)) verir; duplicate → collector_rate_anomaly=True.
-SORU YY (A): strict fail-fast tüm koşu RuntimeError; tarama fold
-üretiminden ÖNCE.
-SORU ZZ (A): walk_forward_claim enum (capable / synthetic_validated /
-single_symbol_real / multi_symbol_real); bayraklardan türetilir.
+SORU VV (A): SCHEMA_VERSION = 1.
+SORU WW (C): data_quality{profile, by_symbol, aggregate}.
+SORU XX (B): coverage = analyze_ohlcv_secs(secs, expected_interval_sec).
+SORU YY (A): strict fail-fast tüm koşu.
+SORU ZZ (A): walk_forward_claim enum.
 SORU AA′ (A): --data-quality-profile legacy|lenient|strict; default
 legacy.
 SORU BB′ (C): excluded_symbols{all, effective, version}.
 SORU T davranışı: single_symbol_real_walkforward_executed yalnızca
-mode=walkforward + 1 sembol ile True (kapanış kriteri).
+mode=walkforward + 1 sembol ile True.
+
+B3.1 ALT PARAMETRE KARARLARI (SORU A–G, 2026-09-22, KİLİTLİ):
+A) Flap quarantine: (C) pencere + üstel geri çekilme (1h→4h→24h);
+   per-symbol sayaç + son_ceza_süresi. Kronik flapper e2-micro WS
+   churn ve SQLite WAL baskısını kalıcı söndürür.
+B) Rotation scan: (D) iki aşamalı — scan 30s (liste tazeliği),
+   WS rotasyonu 5dk (churn sönümleme; hysteresis ile hizalı).
+C) State ayrımı: (A) hysteresis (zaman state) ve flap (sayı state)
+   ayrı. Farklı sorgu desenleri; birleştirme yanlış poz/neg üretir.
+D) Watch veri kaynağı: (A) REST ticker 60s; mevcut tickers_snapshot
+   şemasıyla uyumlu; e2-micro rate-limit ve RAM maliyeti minimum.
+E) Kaynak izleme: (C) structured JSON log + dashboard. Log kalıcı
+   (S′ completeness post-mortem); dashboard anlık müdahale. Dashboard
+   RAM kullanımı izleme planına eklendi.
+F) Top5→Top4 tetikleyici: (C) uyarı otomatik + daralma manuel
+   onaylı. S′ ≥4 kritik; yanlış metrik okuması S′ gate'ini riske
+   atamaz. systemd Restart=always OOM senaryosu için ek koruma.
+G) B2e.real sayacı: (C) paralel — tek-sembol (B2e.real) ve
+   çok-sembol (B3) sayaçları ayrı. BTC_USDT 97h birikimi rotasyon
+   churn'ünden izole; S′ gate B3.1 hatasından korunur.
+
+B3.1 Q1–Q5 ALT PARAMETRE KARARLARI (2026-09-22, KİLİTLİ —
+dış-ajan sentezi, 3 ajan karşılaştırması):
+Q1 (B): Flap penceresi = 1 saat. 5dk rotasyon × 12 döngü; ilk ceza
+        kademesi (1h) ile simetrik. Uzun pencere = geç quarantine
+        (churn devam); kısa = erken donma.
+Q2 (B): Flap sayım birimi = round-trip. Top5 gir-çık = 1 birim; tek
+        yönlü giriş sayılmaz. Spec "gir-çık" tanımıyla uyumlu;
+        tek yönlü ağ gürültüsünü filtreler.
+Q3 (B): Karantina reset = 7 gün karantinasız stabilite sonrası
+        level 1 (fresh start). Kalıcı damga eligible havuzunu
+        küçültüp S'≥4'ü bozar; kademeli düşüş state karmaşıklığını
+        artırır.
+Q4 (B): seed_subscriptions yalnız süreç başlangıcında; state
+        in-memory (restart affı flap penceresi 1h ile kısa sürede
+        kendini düzeltir). WS reconnect'te seed TEKRAR çağrılmaz;
+        mevcut _subscribed set korunur.
+Q5 (A): Watch (top10 - top5) state tutulmaz; yalnız REST ticker.
+        Top5 transition'ları flap/hysteresis state'ine girer;
+        5 sembol için ek RAM/CPU yok.
+
+Asistan öneri revizyonları (dış ajan karşılaştırması, 2026-09-22):
+- A: (D) → (C) — kronik flapper sönümleme; 3 ajan bağımsız işaret etti.
+- G: (A) → (C) — faz geçişinde "kesintisiz" tanımı revize.
+- F: azınlık pozisyonu (B)'ye karşı (C) korundu (S′ risk önceliği).
+- Q1: 3h → 1h — ajan 2/3 uzlaşı (5dk rotasyon × 12 döngü simetri).
+- Q2: tek yönlü çıkış → round-trip — 2/3 uzlaşı (spec "gir-çık").
+- Q4: her reconnect → yalnız süreç başlangıcı — restart affı flap
+  penceresi ile kendini düzeltir.
 
 Mimari:
 Mimari 30 coin limit + Top20 operasyonel limit — bilinçli trade-off.
+Not: B3.1'de tek WS process aktif (3x10 kapasite); ölçek B3.2+ için
+ayrılmış.
 Emtia/hisse exclude — constants.py EXCLUDED_SYMBOLS (Bkz §6.2).
 Aşırı funding ceza — Bkz §6.1.
 Contract size cache — bulk detail bir kez çekilir (1176 sembol).
@@ -461,7 +495,7 @@ Per-symbol max 1 pozisyon + multi-symbol concurrent; global concurrent
 config'ten TEST=3, PROD=2.
 TP/SL exit 5s OHLCV high/low; taker fee 0.0002.
 Strategy config default'u katı kalır (require_sweep/mss/fvg=True,
-entry_window_ms=15000); gevşetme CLI override ile (SORU B: (B)).
+entry_window_ms=15000); gevşetme CLI override ile.
 B2c backtest config: entry_window_ms=300000, üç kapı True,
 cooldown_ms=60000.
 B2c TP/SL hesabı: SL = entry ∓ 0.5×ATR(14, 5s), TP = 2R.
@@ -473,58 +507,71 @@ B2c min SL floor: min_sl_distance_pct = 0.002×entry.
 B2c fill slippage: entry_slippage_bps = 2.0.
 B2c rapor: --report JSON.
 B2d rapor şeması: { config{strategy,sim}, summary, metrics,
-equity_curve, engine, signal_counts, trades }; çoklu config:
-{ config_a, config_b, comparison }.
-B2d metrikleri: sharpe_annualized, profit_factor (kayıpsız → null),
-expectancy_r, avg_holding_sec, max_consecutive_losses.
-B2d equity curve: JSON + CSV.
-B2e.0 event modeli: tüm event'ler symbol + source_seq taşır (default
-geriye uyumlu).
+equity_curve, engine, signal_counts, trades }.
+B2d metrikleri: sharpe_annualized, profit_factor, expectancy_r,
+avg_holding_sec, max_consecutive_losses.
+B2e.0 event modeli: tüm event'ler symbol + source_seq taşır.
 B2e.0 stream_multi: J′ tie-break (ts_ms, event_type_rank, symbol,
 source_seq).
 B2e.0 source_seq kaynağı: trades_ohlcv_1s.sec; orderbook_snapshots.id;
 tickers_snapshot.id.
 B2e.0 PositionSimulator: per-symbol state dict; finalize(last_ts_ms,
 last_prices: dict); MTM equity.
-B2e.0 MTM semantiği: exit fee tahmini yok; sadece entry_fee +
-funding_paid + unrealized gross.
+B2e.0 MTM semantiği: exit fee tahmini yok; entry_fee + funding_paid +
+unrealized gross.
 B2e.1 MultiSymbolRunner: interleaved; per-symbol Strategy +
-SignalDetector; tek PositionSimulator; dropped_entries transition-
-only cooldown kaydı.
-B2e.2 WalkForwardRunner: her fold bağımsız sıfırdan (Strategy/
-Detector/Sim yeniden); warmup = train penceresi; test trades
-entry_ts_ms ≥ test_start_ms; fail-fast exception + callback_errors>0;
-step_ms None/≤0 → test_ms (I.2=A).
-B2e.3 multi_report.build_report: saf fonksiyon; profil eşikleri
-strict/lenient/legacy; G′ şeması + A3 aggregation + BB′ excluded +
-ZZ claim türetme + source passthrough.
+SignalDetector; tek PositionSimulator.
+B2e.2 WalkForwardRunner: her fold bağımsız sıfırdan; warmup = train
+penceresi; test trades entry_ts_ms ≥ test_start_ms; fail-fast.
+B2e.3 multi_report.build_report: saf fonksiyon; strict/lenient/legacy;
+G′ şeması + A3 aggregation + BB′ excluded + ZZ claim.
 SWEEP semantiği: LONG <- SWEEP_DOWN, SHORT <- SWEEP_UP (stop-hunt
 reversal; wick_ratio 0.6).
+B3.1 mexc_ws dinamik sub: subscribe/unsubscribe idempotent; _running
+false ise no-op; reconnect yeni instance varsayımı.
+B3.1 universe_service rotation: apply_scan sync (I/O yok); state
+in-memory; excluded filtre belt-and-suspenders.
+B3.1 runner: rotation arka planda iki timer; --enable-rotation
+opsiyonel; daralma manuel onay.
 
 Kod kuralları: Bkz AnaYasa REV5 §0.
 
-SOHBET-KAPANIS format kuralları: her döküman/kod ayrı 4-backtick
-bloğu; blok içinde 3-backtick YASAK; kontrol checklist'i düz metin;
-kod değişikliği önerileri Protokol §7.4 şablonu (tam yol + eski hali +
-yeni hali + gerekçe) ile verilir. Test kapısı Bkz Protokol §7.5;
-öz-uyum Bkz Protokol §7.6; format Bkz Protokol §7.3.
+SOHBET-KAPANIS format kuralları: PROTOKOL.md §7.5 (blok format) +
+§7.6 (kod değişikliği şablonu; v3.3/v3.4 ile güncellendi) + §7.7
+(test kapısı) + §7.8 (öz-uyum). Kontrol checklist'i düz metin; kod
+bloklarının ÜSTÜNDE.
+PO ek kararları (B3.1'den itibaren):
+- Patch bloklarında `...` işaretleyicisi YASAK (§6.8).
+- Eski/Yeni hali bloklarında dosya yolu yorumu YAZILMAZ (kopyala-
+  yapıştır akışına uygunluk; §6.8).
 
 PROTOKOL İHLALİ NOTU (2026-09-19): asistan aynı sohbette 4-backtick
 kuralını 3 kez ihlal etti; protokol format kuralı netleştirilerek
 kapatıldı.
 
 PROTOKOL İHLALİ NOTU (2026-09-21): PO'nun ilettiği "974 pass" beyanı
-DURUM §2'deki 783 PASS ile karşılaştırılmadan doğru kabul edildi; fark
-+191 mantıksız iken §7.2 Kontrol 5 (sayı tutarlılığı) ve §7.9.1
-(VARSAYIM etiketi) uygulanmadı. Doğru sayı 794 PASS (783 + 11 B2e.1
-testi). 974 beyanı PO tarafından geri çekildi. B2e.1 sonucu
-etkilenmedi. Kayıt amacıyla not edildi. (§10.1 — Mod 1, PO yazdı.)
+DURUM §2'deki 783 PASS ile karşılaştırılmadan doğru kabul edildi.
+Doğru sayı 794 PASS (783 + 11 B2e.1 testi). 974 beyanı PO tarafından
+geri çekildi. B2e.1 sonucu etkilenmedi. Kayıt amacıyla not edildi.
+(§10.1 — Mod 1, PO yazdı.)
+
+PROTOKOL İHLALİ NOTU (2026-09-22): asistan dış-ajan prompt mesajında
+PROTOKOL.md §7.1 ihlali yaptı (checklist bloğun altında verildi).
+PO fark etti; çıktı doğru sırayla yeniden verildi. Kayıt için §6.6'da.
+(§10.1 — Mod 1, PO yazdı.)
+
+PROTOKOL İHLALİ NOTU (2026-09-22, B3.1 Mod 2): `...` işaretleyicisi
+kaynaklı __init__ attribute kaybı. Kayıt için §6.8'de. (§10.1 —
+Mod 1, asistan.)
 
 12. DOSYA KONUMLARI
 docs/DURUM.md — bu dosya.
-docs/SOHBET-KAPANIS-PROTOKOLU.md — yöntem dökümanı (sabit).
-docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kuralları.
-docs/MikoV2-Proje-Tum-Moduller-REV5.md — modül pseudo.
+docs/PROTOKOL.md — yöntem dökümanı v3.4 (sabit; evrensel).
+docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kuralları (ANAYASA rolü).
+docs/MikoV2-Proje-Tum-Moduller-REV5.md — modül pseudo (mimari
+referans).
+Eski docs/SOHBET-KAPANIS-PROTOKOLU.md v2.6 — EZİLDİ; PROTOKOL.md
+kullanılır.
 
 B2e.1 değişen/yeni:
 src/backtest/multi_symbol_runner.py (YENİ) — MultiSymbolRunner.
@@ -538,18 +585,15 @@ tests/unit/test_backtest_multi_symbol_synthetic.py (YENİ) — 8 test.
 
 B2e.2 değişen/yeni:
 src/backtest/multi_symbol_runner.py (DEĞİŞTİ) — WalkForwardConfig +
-FoldWindow + FoldResult + WalkForwardResult + WalkForwardRunner;
-MultiSymbolRunner window_id/fold_id + _seen_ohlcv_secs.
-src/backtest/position_sim.py (DEĞİŞTİ) — Trade.window_id/fold_id;
-PositionSimulator(*, window_id, fold_id).
+FoldWindow + FoldResult + WalkForwardResult + WalkForwardRunner.
+src/backtest/position_sim.py (DEĞİŞTİ) — Trade.window_id/fold_id.
 src/backtest/replay_transport.py (DEĞİŞTİ) — collect_ohlcv_secs.
-tests/unit/test_backtest_walkforward.py (YENİ) — 11 test (B2e.2).
+tests/unit/test_backtest_walkforward.py (YENİ) — 11 test.
 tests/manual/backtest_run.py (DEĞİŞTİ) — --mode + --symbols +
 --train-ms/--test-ms/--step-ms; KRİTİK FIX sim.finalize.
 
 B2e.2S değişen/yeni:
-tests/unit/test_backtest_walkforward.py (DEĞİŞTİ) — +4 test (LL
-senaryoları).
+tests/unit/test_backtest_walkforward.py (DEĞİŞTİ) — +4 test.
 
 B2e.3 değişen/yeni:
 src/backtest/multi_report.py (YENİ) — SCHEMA_VERSION, CLAIM_*,
@@ -558,25 +602,46 @@ _excluded_report, _compute_claim.
 src/backtest/replay_transport.py (DEĞİŞTİ) — collect_ticker_secs +
 collect_depth_secs.
 tests/manual/backtest_run.py (DEĞİŞTİ) — --data-quality-profile;
-build_report entegrasyonu (single + multi + walkforward);
-_collect_coverage_secs.
+build_report entegrasyonu; _collect_coverage_secs.
 tests/unit/test_backtest_multi_report.py (YENİ) — 24 test.
+
+B3.1 değişen/yeni:
+src/data_layer/mexc_ws.py (DEĞİŞTİ) — dinamik subscribe/unsubscribe +
+subscribed_symbols(); _subscribed set; close() _subscribed.clear().
+src/data_layer/universe_service.py (DEĞİŞTİ) — RotationDecision +
+hysteresis (zaman) + flap (sayı, Q2=B round-trip) + üstel quarantine
+(SORU A) + Q3=B 7 gün stabil reset; _consume_flap_slot SİLİNDİ.
+src/data_layer/constants.py (mevcut) — EXCLUDED_SYMBOLS kullanımı.
+tests/shadow/runner.py (DEĞİŞTİ) — çok-sembol state; iki timer
+(_universe_scan_loop 30s + _ws_rotation_loop 5dk); watch REST ticker;
+per-symbol watchdog; Top5→Top4 daralma uyarı; seed_subscriptions
+(Q4=B); --symbols + --enable-rotation CLI.
+tests/unit/test_b3_1_rotation.py (YENİ) — 8 test.
+tests/shadow/test_rotation_integration.py (YENİ) — 7 test.
 
 13. YENİ SOHBET NASIL BAŞLAR
 Verilecek dosyalar:
-DURUM.md (bu)
-SOHBET-KAPANIS-PROTOKOLU.md
+DURUM.md (bu, v2.14)
+PROTOKOL.md (v3.4, evrensel)
 MikoV2-AnaYasa-REV5.md
 MikoV2-Proje-Tum-Moduller-REV5.md
+İlk mesajda Mod 1 için istenen dosyalar (B3.2 plan için):
+- tests/shadow/runner.py (B3.1 sonrası hali)
+- src/backtest/signal_detector.py
+- src/backtest/strategy.py
+- src/features/micro_trigger.py (varsa)
+- src/backtest/engine.py
 Açılış mesajı:
-"DURUM.md v2.12'yi okudun mu? B2e tüm alt fazlar kapandı (842 PASS).
-İki iş var: (1) B2e kapanış commit'i — PO atacak, tek commit; (2) B3.1
-çok-sembol kolektör — kapsam SORU RR (A): Top5 WS + Top10 watch.
-B3.1'e başlamadan önce SORU RR'nin detay planını onaylat; sonra
-universe_service.py + runner'a WS abonelik rotasyonu ekle.
-Commit B2e kapanışında tek; şimdi commit atma. SORU A′–W ve
-LL/MM/NN/OO/PP/QQ/RR/SS/TT/UU/VV/WW/XX/YY/ZZ/AA′/BB′/A1/A2/A3/X/Z/3
-kilitli; yeniden sorma."
+"MikoV2 projesine devam ediyoruz. B3.2'den başlıyoruz. Mod: 1
+(Döküman). DURUM.md v2.14'ü okudun mu? B3.1 kapandı (856 PASS +
+1 bilinen transient FAIL). PROTOKOL.md v3.4 yürürlükte. SORU SS=C
+sırası: B3.2 → B3.3 → B3.4 → B3.5. B3.2 kapsamı: Micro-trigger canlı
+(WS tick -> detector -> signal -> strategy). Kısıtlar: commit B3.2
+kapanışında tek; SORU A′–W + LL/MM/NN/OO/PP/QQ/RR/SS/TT/UU/VV/WW/XX/
+YY/ZZ/AA′/BB′/A1/A2/A3/X/Z/3 + B3.1 A–G + B3.1 Q1–Q5 kilitli;
+yeniden sorma; §6.3 async_telemetry transient B3.2 kapsamı dışı;
+§6.8 `...` yasak + Eski/Yeni hali bloklarında dosya yolu yok;
+Python 3.10; §7.6 şablon + §7.7 test kapısı + §7.8 öz-uyum."
 
 14. UNFROZEN BEYANI
 FROZEN YOK.
@@ -604,14 +669,27 @@ PASS.
 v2.10 (2026-09-21): B2e planı kilitli; SORU A′–W (§16); kod başlamadı.
 v2.11 (2026-09-21): B2e.−1 + B2e.0 kapandı; SORU X yeni açıldı; 783
 PASS.
-v2.12 (2026-09-21): B2e tüm alt fazlar kapandı — B2e.1 (11 test) +
-B2e.1S (8) + B2e.2 (11) + B2e.2S (4) + B2e.3 (24). Toplam 842 PASS.
-SORU X kapandı (A). SORU Z/Y/3/LL/MM/NN/OO/PP/QQ/RR/SS/TT/UU/VV/WW/XX/
-YY/ZZ/AA′/BB′/A1/A2/A3 kilitli. CLI: --mode single|multi|walkforward +
---data-quality-profile. multi_report.py (G′ şeması). Kritik fix:
-backtest_run.py sim.finalize imza uyumu. SORU T claim davranışı
-düzeltildi (single_symbol_real_walkforward_executed yalnız walkforward
-modda). B2e kapanış commit'i sırada.
+v2.12 (2026-09-21): B2e tüm alt fazlar kapandı — B2e.1 (11) + B2e.1S
+(8) + B2e.2 (11) + B2e.2S (4) + B2e.3 (24). Toplam 842 PASS. SORU X
+kapandı (A). SORU Z/Y/3/LL/MM/NN/OO/PP/QQ/RR/SS/TT/UU/VV/WW/XX/YY/ZZ/
+AA′/BB′/A1/A2/A3 kilitli. CLI: --mode + --data-quality-profile.
+multi_report.py (G′ şeması). Kritik fix: backtest_run.py sim.finalize
+imza uyumu. B2e kapanış commit'i atıldı.
+v2.13 (2026-09-22): B3.1 uygulama planı Mod 1'de ONAYLANDI. SORU A–G
+alt parametre kararları kilitlendi. PROTOKOL.md v3.2 yürürlükte;
+SOHBET-KAPANIS-PROTOKOLU.md v2.6 ezildi; tüm atıflar PROTOKOL.md'ye
+geçti. §6.6 yeni PROTOKOL İHLALİ NOTU (2026-09-22, §7.1 ihlali).
+§6.7 DURUM.md → PROTOKOL.md geçişi. Mod 2 için dosya istekleri
+sırada. B2e kapanış commit'i atıldı.
+v2.14 (2026-09-22): B3.1 kapandı (856 PASS + 1 bilinen transient
+FAIL). mexc_ws dinamik sub; universe_service rotation (SORU A–G +
+Q1–Q5 dış-ajan sentezi: Q1=B 1h, Q2=B round-trip, Q3=B 7 gün reset,
+Q4=B restart seed, Q5=A watch state yok); runner çok-sembol; iki
+timer (30s scan / 5dk rotasyon); watch REST ticker; per-symbol
+watchdog; Top5→Top4 manuel onay uyarısı. PROTOKOL.md v3.4 yürürlükte.
+§6.8 yeni PROTOKOL İHLALİ NOTU (`...` işaretleyicisi; PO kararı:
+`...` yasak, Eski/Yeni hali bloklarında dosya yolu yok). Tek commit
+B3.1 kapanış.
 
 16. SORU A′–W PLAN KARARLARI (KİLİTLİ)
 Bu bölüm B2e plan kararlarının SSOT sahibidir. Diğer bölümler bu
@@ -632,27 +710,19 @@ SORU E — Top20 kaynağı: (A) DB'de mevcut semboller; CLI --symbols;
 §6.2 exclude önce. UYGULANDI.
 SORU F — Dosya yolları: multi_symbol_runner.py, multi_report.py,
 test_backtest_multi.py, test_backtest_walkforward.py; CLI mevcut
-backtest_run.py genişler. Ek test dosyaları: test_b2e_minus1_compliance.py
-(B2e.−1), test_b2e0_infrastructure.py (B2e.0),
-test_backtest_multi_symbol_synthetic.py (B2e.1S),
+backtest_run.py genişler. Ek test dosyaları:
+test_b2e_minus1_compliance.py (B2e.−1), test_b2e0_infrastructure.py
+(B2e.0), test_backtest_multi_symbol_synthetic.py (B2e.1S),
 test_backtest_multi_report.py (B2e.3). UYGULANDI.
-SORU G′ — Rapor şeması: iki katmanlı + diagnostics (schema_version,
-multi_symbol_capable, synthetic_multi_symbol_validated,
-real_multi_symbol_validated, single_symbol_real_walkforward_executed,
-real_data_symbols, data_quality{profile,completeness,max_gap_ms,gaps},
-ticker_coverage, depth_coverage, global_limit_exercised,
-dropped_entries_count, dropped_entries, excluded_symbols, fold_count,
-single_fold_warning, walk_forward_claim, fold_windows). UYGULANDI
-(B2e.3).
+SORU G′ — Rapor şeması: iki katmanlı + diagnostics. UYGULANDI (B2e.3).
 SORU H — Global limit drop: (A) FIFO; ts_ms ASC; tie-break
 (event_type_rank, symbol, source_seq); exit önce işlenir. UYGULANDI.
 SORU I — Walk-forward fold: I.1=(B) ≥1 fold; I.2=(A) step_ms default
 = test_ms; I.3=(A) fail-fast. UYGULANDI (B2e.2).
 SORU J′ — Merge determinizmi: (A) (ts_ms, event_type_rank, symbol,
 source_seq); OHLCV=0/Depth=1/Ticker=2. UYGULANDI (B2e.0).
-SORU K′′ — Global limit reject: attempt-based cooldown; reason:
-global_limit_full / per_symbol_max_position / cooldown_active; risk
-notu: canlı parity backtest-only assumption. UYGULANDI (B2e.1).
+SORU K′′ — Global limit reject: attempt-based cooldown; risk notu:
+canlı parity backtest-only assumption. UYGULANDI (B2e.1).
 SORU L′′ — Equity/funding sözleşmesi: L.1=(B) her OHLCV close'unda
 portföy MTM; L.2=(A) finalize son fiyat + WARNING; L.3=(A) funding
 per-symbol timeline, ticker event günceller. İşlem sırası: exit/TP/SL
@@ -662,46 +732,28 @@ SORU N — Trade/rapor şeması: additive; window_id + fold_id. UYGULANDI
 (B2e.2).
 SORU O — §6.2 exclude listesi: explicit (constants.py); versiyonlanır;
 universe_service + CLI. UYGULANDI (B2e.−1).
-SORU P — KAPATILDI: içeriği SORU T + B2e.2S'ye dağıtıldı (v2.12, SORU
-KK=A).
-SORU Q′ — Veri kalitesi: çok katmanlı (fail-fast / WARNING /
-strict-lenient). UYGULANDI (B2e.3) — profiller strict/lenient/legacy.
+SORU P — KAPATILDI: içeriği SORU T + B2e.2S'ye dağıtıldı (v2.12).
+SORU Q′ — Veri kalitesi: çok katmanlı; profiller strict/lenient/legacy.
+UYGULANDI (B2e.3).
 SORU R (v1) — Synthetic fixture: 18 senaryo; B2e.1S'ye 14 (v1) kabul
-edildi; bunların minimum alt kümesi (8) B2e.1S'de; kalan 6 B2e.2S'ye
-ertelendi. 4 senaryo B2e.2S'de (LL=A). Liste:
-  G1 J′ determinizm (3): aynı ts'de OHLCV<Depth<Ticker; aynı ts+tip'te
-      sembol alfabetik; aynı ts+tip+sembol'de source_seq artan.
-  G2 Interleaved (2): iki sembolün 1s OHLCV'leri serpişir + candle
-      sayıları ayrı doğru; bir sembolde out-of-order drop diğerini
-      etkilemez.
-  G3 Per-symbol izolasyon (3): ATR bağımsız; _next_funding_ms
-      bağımsız; _last_price bağımsız.
-  G4 K′′ drops (3): per_symbol_max_position; global_limit_full;
-      cooldown_active transition-only.
-  G5 MTM + finalize (2): iki açık pozisyon equity = realized + 2×upnl
-      − funding; finalize({}) son fiyatları sim state'ten okur.
-  G6 Determinizm (1): aynı girdi + config → trades/drops/stats
-      birebir.
-  B2e.2S ek (LL=A): step>test; step≤0 default; çok-fold determinizm;
-      boundary-gap.
+edildi; minimum alt kümesi (8) B2e.1S'de; kalan 6 B2e.2S'ye
+ertelendi. 4 senaryo B2e.2S'de (LL=A).
 SORU S′ — Gerçek multi-symbol gate: ≥4 sembol, ≥30 gün, completeness
 ≥%95, max gap ≤30dk, max_concurrent ≥3, dropped>0, fold≥2, ticker
 doğrulanmış, exclude geçmiş.
 SORU T — B2e kapanış tanımı: "capable + synthetic validated +
 single-symbol real walk-forward". B2e.real ayrı gate. UYGULANDI
 (B2e.3 claim türetme).
-SORU U — source_seq kaynağı: DB rowid (orderbook_snapshots.id,
-tickers_snapshot.id, trades_ohlcv_1s.sec). UYGULANDI (B2e.0).
+SORU U — source_seq kaynağı: DB rowid. UYGULANDI (B2e.0).
 SORU V — Funding rate kaynağı: tickers_snapshot.funding_rate.
 UYGULANDI (B2e.0).
 SORU W — DURUM güncelleme: plan snapshot.
 
 16b. SORU X–BB′ EK KARARLAR (KİLİTLİ — B2e.1'den B2e.3'e)
-SORU X (A): K′′ diagnostics için Strategy + PositionSimulator
-last_rejection_reason additive alan. UYGULANDI (B2e.1).
+SORU X (A): Strategy + PositionSimulator.last_rejection_reason
+additive alan. UYGULANDI (B2e.1).
 SORU Y: KAPANDI — test sayısı tutarlılık yanılgısı.
-SORU Z (B): SORU R senaryo listesi B2e.1S'de önerildi; kabul edildi
-(v1, §16'ya eklendi).
+SORU Z (B): SORU R senaryo listesi v1 kabul edildi.
 SORU 3 (dış ajan): sentetik doğrulama minimum + B3.1 paralel + B2e.2
 odak. UYGULANDI.
 SORU LL (A): B2e.2S 4 senaryo.

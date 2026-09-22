@@ -34,6 +34,13 @@ from src.data_layer.mexc_rest import MEXCRestClient
 from src.data_layer.mexc_ws import MEXCWSClient
 from src.data_layer.seq import SeqMode, SequenceValidator
 from src.data_layer.obi import OBIComputer
+from src.data_layer.constants import EXCLUDED_SYMBOLS
+from src.data_layer.metrics_fetcher import FetcherConfig
+from src.data_layer.universe_service import (
+    UniverseService,
+    RotationDecision,
+    ScanResult,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -101,13 +108,16 @@ class ShadowRunner:
 
     def __init__(
         self,
-        symbol: str,
+        symbols: list[str],
         duration_s: int,
         db_path: Path | None = None,
+        enable_rotation: bool = False,
+        scan_interval_s: float = 30.0,
+        rotation_interval_s: float = 300.0,
     ) -> None:
         self.db_path = db_path
         self._conn: sqlite3.Connection | None = None
-        self.symbol = symbol
+        self.symbols: set[str] = set(symbols)
         self.duration_s = duration_s
         self.metrics = ShadowMetrics()
 
@@ -116,15 +126,25 @@ class ShadowRunner:
         self.seq_validator = SequenceValidator({}, {}, mode=SeqMode.MEXC)
         self.obi = OBIComputer(depth=10)
 
-        self.current_epoch = 1
-        self.synced = False
-        self.snapshot_version = 0
-        self.last_applied_version = 0
-        self.pending: list[dict] = []
+        # B3.1: per-symbol state
+        self.current_epoch: dict[str, int] = {s: 1 for s in self.symbols}
+        self.synced: dict[str, bool] = {s: False for s in self.symbols}
+        self.snapshot_version: dict[str, int] = {s: 0 for s in self.symbols}
+        self.last_applied_version: dict[str, int] = {s: 0 for s in self.symbols}
+        self.pending: dict[str, list[dict]] = {s: [] for s in self.symbols}
 
         self._ohlcv_buffer: dict[str, dict] = {}
-        self._contract_size: float = 0.0
+        self._contract_size: dict[str, float] = {}
         self._shutdown_event = asyncio.Event()
+
+        # B3.1 rotation (SORU B=D: iki timer)
+        self._enable_rotation = enable_rotation
+        self._scan_interval_s = scan_interval_s
+        self._rotation_interval_s = rotation_interval_s
+        self.universe: UniverseService | None = None
+        self._latest_scan: ScanResult | None = None
+        self._watch_symbols: set[str] = set()
+        self._last_ws_data_mono: dict[str, float] = {}
 
         self.rest: MEXCRestClient | None = None
         self.ws: MEXCWSClient | None = None
@@ -145,25 +165,25 @@ class ShadowRunner:
                 continue
         return diffs
 
-    def _apply_push(self, data: dict) -> None:
-        book = self.l2_buffer.get_book(self.symbol)
+    def _apply_push(self, symbol: str, data: dict) -> None:
+        book = self.l2_buffer.get_book(symbol)
         if book is None:
             return
         diffs = self._parse_diffs(data)
         if not diffs:
             return
         self.l2_buffer.apply_batch(
-            self.symbol, diffs, batch_epoch=book.seq_epoch.get(self.symbol, 0)
+            symbol, diffs, batch_epoch=book.seq_epoch.get(symbol, 0)
         )
         self.metrics.max_bids_len = max(self.metrics.max_bids_len, book.bids_len)
         self.metrics.max_asks_len = max(self.metrics.max_asks_len, book.asks_len)
         try:
-            self.metrics.obi_samples.append(self.l2_buffer.get_obi(self.symbol))
+            self.metrics.obi_samples.append(self.l2_buffer.get_obi(symbol))
         except Exception:
             pass
 
-    def _apply_snapshot(self, snap: dict) -> None:
-        book = self.l2_buffer.create_book(self.symbol)
+    def _apply_snapshot(self, symbol: str, snap: dict) -> None:
+        book = self.l2_buffer.create_book(symbol)
         n_bids = min(len(snap["bids"]), 5000)
         n_asks = min(len(snap["asks"]), 5000)
         for i in range(n_bids):
@@ -178,34 +198,38 @@ class ShadowRunner:
     # ---------------------------------------------------------------- ws callbacks
 
     async def on_depth(self, symbol: str, data: dict) -> None:
-        if symbol != self.symbol:
+        if symbol not in self.symbols:
             return
         version = data.get("version")
         if version is None:
             return
         version = int(version)
 
-        if not self.synced:
-            self.pending.append({"version": version, "data": data})
+        if not self.synced.get(symbol, False):
+            self.pending.setdefault(symbol, []).append(
+                {"version": version, "data": data}
+            )
             self.metrics.buffered_pushes += 1
             return
 
         self.metrics.pushes += 1
+        self._last_ws_data_mono[symbol] = time.monotonic()
         result = await self.seq_validator.validate(
-            self.symbol, self.current_epoch, first_u=version
+            symbol, self.current_epoch.get(symbol, 1), first_u=version
         )
         if result.needs_resync:
             self.metrics.gaps += 1
             logger.warning(
-                "gap live version=%d last=%d pending=%d",
+                "gap live symbol=%s version=%d last=%d pending=%d",
+                symbol,
                 version,
                 result.last_u,
-                len(self.pending),
+                len(self.pending.get(symbol, [])),
             )
             try:
-                await self._gap_recover()
+                await self._gap_recover(symbol)
             except Exception as e:
-                logger.warning("gap recovery failed: %s", e)
+                logger.warning("gap recovery failed symbol=%s: %s", symbol, e)
             return
         if not result.is_valid:
             if result.is_gap:
@@ -214,13 +238,17 @@ class ShadowRunner:
                 self.metrics.stale_drops += 1
             return
 
-        self._apply_push(data)
+        self._apply_push(symbol, data)
         self.metrics.valid += 1
-        self.last_applied_version = version
+        self.last_applied_version[symbol] = version    
 
     async def on_deal(self, symbol: str, trades: list) -> None:
         """Handle push.deal batch -> 1s OHLCV USDT-normalized aggregation."""
-        if symbol != self.symbol:
+        if symbol not in self.symbols:
+            return
+        cs = self._contract_size.get(symbol, 0.0)
+        if cs <= 0:
+            self.metrics.trades_dropped += len(trades)
             return
         for t in trades:
             if not isinstance(t, dict):
@@ -239,7 +267,7 @@ class ShadowRunner:
                 self.metrics.trades_unknown_side += 1
                 continue
 
-            usdt_vol = contracts * self._contract_size * price
+            usdt_vol = contracts * cs * price
             if usdt_vol <= 0:
                 self.metrics.trades_dropped += 1
                 continue
@@ -312,21 +340,25 @@ class ShadowRunner:
     # ---------------------------------------------------------------- tickers poll
 
     async def _tickers_poll_task(self) -> None:
-        """Poll ticker + funding REST every N seconds, store snapshot."""
+        """Poll ticker + funding REST for Top5 ∪ watch every 60s."""
+        assert self.rest is not None
         while not self._shutdown_event.is_set():
-            try:
-                ticker = await self.rest.fetch_ticker(self.symbol)
-                funding = await self.rest.fetch_funding_rate(self.symbol)
-                oi_usdt = (
-                    ticker["hold_vol"]
-                    * self._contract_size
-                    * ticker["last_price"]
-                )
-                self._insert_ticker_snapshot(ticker, funding, oi_usdt)
-                self.metrics.tickers_polled += 1
-            except Exception as e:
-                self.metrics.tickers_failed += 1
-                logger.warning("tickers poll failed: %s", e)
+            # SORU D=A: Top5 WS + Top10 watch (REST ticker 60s)
+            targets = set(self.symbols) | set(self._watch_symbols)
+            for symbol in sorted(targets):
+                try:
+                    ticker = await self.rest.fetch_ticker(symbol)
+                    funding = await self.rest.fetch_funding_rate(symbol)
+                    cs = self._contract_size.get(symbol, 0.0)
+                    oi_usdt = (
+                        ticker["hold_vol"] * cs * ticker["last_price"]
+                        if cs > 0 else 0.0
+                    )
+                    self._insert_ticker_snapshot(ticker, funding, oi_usdt)
+                    self.metrics.tickers_polled += 1
+                except Exception as e:
+                    self.metrics.tickers_failed += 1
+                    logger.warning("tickers poll failed symbol=%s: %s", symbol, e)
 
             try:
                 await asyncio.wait_for(
@@ -369,94 +401,104 @@ class ShadowRunner:
     async def _bootstrap(self) -> None:
         assert self.rest is not None
         deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline and not self.pending:
+        while time.monotonic() < deadline and not any(self.pending.values()):
             await asyncio.sleep(0.05)
-        logger.info("buffered pushes before snapshot=%d", len(self.pending))
+        total_buffered = sum(len(v) for v in self.pending.values())
+        logger.info("buffered pushes before snapshot total=%d", total_buffered)
 
-        snap = await self.rest.fetch_snapshot(self.symbol)
-        self.snapshot_version = snap["version"]
-        self.last_applied_version = snap["version"]
+        # B3.1 Q4=B: seed UniverseService (yalnız süreç başlangıcı)
+        if self.universe is not None:
+            self.universe.seed_subscriptions(self.symbols)
 
-        first_pending = self.pending[0]["version"] if self.pending else None
-        last_pending = self.pending[-1]["version"] if self.pending else None
+        for symbol in sorted(self.symbols):
+            await self._bootstrap_symbol(symbol)
+
+    async def _bootstrap_symbol(self, symbol: str) -> None:
+        assert self.rest is not None
+        snap = await self.rest.fetch_snapshot(symbol)
+        self.snapshot_version[symbol] = snap["version"]
+        self.last_applied_version[symbol] = snap["version"]
+
+        pending = self.pending.get(symbol, [])
+        first_pending = pending[0]["version"] if pending else None
+        last_pending = pending[-1]["version"] if pending else None
         logger.info(
-            "snapshot version=%d first_pending=%s last_pending=%s buffered=%d",
-            self.snapshot_version,
+            "snapshot symbol=%s version=%d first_pending=%s "
+            "last_pending=%s buffered=%d",
+            symbol,
+            snap["version"],
             first_pending,
             last_pending,
-            len(self.pending),
+            len(pending),
         )
 
-        self._apply_snapshot(snap)
-        await self.seq_validator.set_epoch(self.symbol, self.current_epoch)
-        await self.seq_validator.set_last_u(self.symbol, self.snapshot_version, 0)
+        self._apply_snapshot(symbol, snap)
+        await self.seq_validator.set_epoch(
+            symbol, self.current_epoch.get(symbol, 1)
+        )
+        await self.seq_validator.set_last_u(symbol, snap["version"], 0)
 
-        target_version = self.snapshot_version + 1
+        target_version = snap["version"] + 1
         applied_from_buffer = 0
         remaining: list[dict] = []
-        for push in self.pending:
+        for push in pending:
             v = push["version"]
             if v < target_version:
                 continue
             if v == target_version:
-                self._apply_push(push["data"])
-                self.last_applied_version = v
+                self._apply_push(symbol, push["data"])
+                self.last_applied_version[symbol] = v
                 target_version += 1
                 applied_from_buffer += 1
             else:
                 remaining.append(push)
 
-        logger.info(
-            "bootstrap buffer applied=%d remaining=%d next_expected=%d",
-            applied_from_buffer,
-            len(remaining),
-            target_version,
-        )
-
         if remaining:
             logger.warning(
-                "gap between snapshot and buffer, bridging via depth_commits"
+                "gap between snapshot and buffer symbol=%s", symbol
             )
             try:
-                await self._gap_recover()
+                await self._gap_recover(symbol)
             except Exception as e:
-                logger.warning("gap bridge failed: %s", e)
+                logger.warning("gap bridge failed symbol=%s: %s", symbol, e)
                 if remaining:
                     oldest = remaining[0]["version"]
                     await self.seq_validator.set_last_u(
-                        self.symbol, oldest - 1, 0
+                        symbol, oldest - 1, 0
                     )
-                    self.last_applied_version = oldest - 1
+                    self.last_applied_version[symbol] = oldest - 1
 
             for push in remaining:
                 v = push["version"]
-                if v != self.last_applied_version + 1:
+                if v != self.last_applied_version[symbol] + 1:
                     continue
-                self._apply_push(push["data"])
-                self.last_applied_version = v
+                self._apply_push(symbol, push["data"])
+                self.last_applied_version[symbol] = v
 
-        self.pending.clear()
-        self.synced = True
+        self.pending[symbol] = []
+        self.synced[symbol] = True
         logger.info(
-            "bootstrap complete last_applied=%d", self.last_applied_version
+            "bootstrap complete symbol=%s last_applied=%d",
+            symbol,
+            self.last_applied_version[symbol],
         )
 
-    async def _gap_recover(self) -> None:
+    async def _gap_recover(self, symbol: str) -> None:
         if self.rest is None:
             return
-        commits = await self.rest.fetch_commits(self.symbol, limit=1000)
+        commits = await self.rest.fetch_commits(symbol, limit=1000)
         if not commits:
-            logger.warning("gap recovery: no commits returned")
+            logger.warning("gap recovery: no commits returned symbol=%s", symbol)
             self.metrics.resyncs += 1
             return
         applied = 0
         for commit in commits:
             v = commit["version"]
-            if v <= self.last_applied_version:
+            if v <= self.last_applied_version[symbol]:
                 continue
-            if v != self.last_applied_version + 1:
+            if v != self.last_applied_version[symbol] + 1:
                 break
-            book = self.l2_buffer.get_book(self.symbol)
+            book = self.l2_buffer.get_book(symbol)
             if book is None:
                 break
             diffs: list[tuple[str, float, float]] = []
@@ -466,34 +508,36 @@ class ShadowRunner:
                 diffs.append(("ask", p, q))
             if diffs:
                 self.l2_buffer.apply_batch(
-                    self.symbol,
+                    symbol,
                     diffs,
-                    batch_epoch=book.seq_epoch.get(self.symbol, 0),
+                    batch_epoch=book.seq_epoch.get(symbol, 0),
                 )
-            self.last_applied_version = v
+            self.last_applied_version[symbol] = v
             applied += 1
 
         await self.seq_validator.set_last_u(
-            self.symbol, self.last_applied_version, 0
+            symbol, self.last_applied_version[symbol], 0
         )
         self.metrics.resyncs += 1
         logger.info(
-            "gap recovery applied=%d upto=%d",
+            "gap recovery symbol=%s applied=%d upto=%d",
+            symbol,
             applied,
-            self.last_applied_version,
-        )
-
+            self.last_applied_version[symbol],
+        )    
     # ---------------------------------------------------------------- flush
 
     async def _flush_snapshot(self) -> None:
-        """Flush L2 depth snapshot + active OHLCV bucket to SQLite."""
+        """Flush per-symbol L2 depth snapshot + active OHLCV buckets."""
         if self.db_path is None or self._conn is None:
             return
 
-        book = self.l2_buffer.get_book(self.symbol)
-        if book is not None:
-            snapshot_ts = int(time.time() * 1000)
-            version = self.last_applied_version
+        snapshot_ts = int(time.time() * 1000)
+        for symbol in sorted(self.symbols):
+            book = self.l2_buffer.get_book(symbol)
+            if book is None:
+                continue
+            version = self.last_applied_version.get(symbol, 0)
             bids = [
                 (float(book.bids_price[i]), float(book.bids_qty[i]))
                 for i in range(min(book.bids_len, 500))
@@ -509,7 +553,7 @@ class ShadowRunner:
                     VALUES (?, ?, ?, ?, ?, ?)""",
                     (
                         snapshot_ts,
-                        self.symbol,
+                        symbol,
                         version,
                         json.dumps(bids),
                         json.dumps(asks),
@@ -517,14 +561,8 @@ class ShadowRunner:
                     ),
                 )
                 self._conn.commit()
-                logger.info(
-                    "flushed depth ts=%d version=%d depth=%d",
-                    snapshot_ts,
-                    version,
-                    len(bids),
-                )
             except Exception as e:
-                logger.warning("flush depth failed: %s", e)
+                logger.warning("flush depth failed symbol=%s: %s", symbol, e)
 
         for sym, b in list(self._ohlcv_buffer.items()):
             self._flush_ohlcv_sync(sym, b)
@@ -600,6 +638,139 @@ class ShadowRunner:
         except (NotImplementedError, AttributeError, ValueError):
             pass
 
+    async def _universe_scan_loop(self) -> None:
+        """B3.1 SORU B=D: 30s tarama (liste tazeliği)."""
+        assert self.universe is not None
+        while not self._shutdown_event.is_set():
+            try:
+                self._latest_scan = await self.universe.scan()
+                logger.info(
+                    "universe scan top5=%s watch=%s",
+                    self._latest_scan.top5,
+                    self._latest_scan.top10[len(self._latest_scan.top5):],
+                )
+            except Exception as e:
+                logger.warning("universe scan failed: %s", e)
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self._scan_interval_s,
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+
+    async def _ws_rotation_loop(self) -> None:
+        """B3.1 SORU B=D: 5dk WS rotasyonu (churn sönümleme)."""
+        assert self.universe is not None
+        while not self._shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self._rotation_interval_s,
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+            if self._latest_scan is None:
+                continue
+            try:
+                decision = self.universe.apply_scan(
+                    self._latest_scan, int(time.time() * 1000)
+                )
+                await self._apply_rotation(decision)
+            except Exception as e:
+                logger.warning("ws rotation failed: %s", e)
+
+    async def _apply_rotation(self, decision: RotationDecision) -> None:
+        if self.ws is None or self.rest is None:
+            return
+        for sym in decision.to_subscribe:
+            try:
+                ok = await self.ws.subscribe(sym)
+                if not ok:
+                    continue
+                # Yeni sembol: snapshot çek + state kur
+                snap = await self.rest.fetch_snapshot(sym)
+                self.symbols.add(sym)
+                self.current_epoch.setdefault(sym, 1)
+                self.synced.setdefault(sym, False)
+                self.snapshot_version.setdefault(sym, 0)
+                self.last_applied_version.setdefault(sym, 0)
+                self.pending.setdefault(sym, [])
+                self._apply_snapshot(sym, snap)
+                self.snapshot_version[sym] = snap["version"]
+                self.last_applied_version[sym] = snap["version"]
+                await self.seq_validator.set_epoch(sym, 1)
+                await self.seq_validator.set_last_u(sym, snap["version"], 0)
+                self.synced[sym] = True
+                if sym not in self._contract_size:
+                    try:
+                        cs = await self.rest.fetch_contract_size(sym)
+                        self._contract_size[sym] = cs
+                    except Exception as e:
+                        logger.warning(
+                            "cs fetch failed symbol=%s: %s", sym, e
+                        )
+                logger.warning("B3_1_SUBSCRIBE symbol=%s", sym)
+            except Exception as e:
+                logger.warning("subscribe failed symbol=%s: %s", sym, e)
+
+        for sym in decision.to_unsubscribe:
+            try:
+                ok = await self.ws.unsubscribe(sym)
+                if ok:
+                    self.symbols.discard(sym)
+                    self._last_ws_data_mono.pop(sym, None)
+                    logger.warning("B3_1_UNSUBSCRIBE symbol=%s", sym)
+            except Exception as e:
+                logger.warning("unsubscribe failed symbol=%s: %s", sym, e)
+
+        self._watch_symbols = set(decision.watch_symbols)
+
+    async def _per_symbol_watchdog(self) -> None:
+        """Per-symbol WS data starvation watchdog (90s)."""
+        while not self._shutdown_event.is_set():
+            await asyncio.sleep(15)
+            now = time.monotonic()
+            for sym in sorted(self.symbols):
+                last = self._last_ws_data_mono.get(sym, 0.0)
+                if last > 0 and now - last > 90.0:
+                    logger.warning(
+                        "WS data starvation symbol=%s age_s=%.1f",
+                        sym,
+                        now - last,
+                    )
+                    # WS global watchdog ayrıca çalışır; per-symbol log yeterli.
+            if self.ws is not None:
+                last = getattr(self.ws, "_last_data_mono", 0.0)
+                if last > 0 and now - last > 90.0:
+                    logger.warning(
+                        "WS global data starvation age_s=%.1f; shutdown",
+                        now - last,
+                    )
+                    self._shutdown_event.set()
+                    return
+
+    def _check_top5_daralma(self) -> None:
+        """SORU F=C: Top5→Top4 uyarı otomatik; daralma manuel onaylı."""
+        n_ws = len(self.symbols)
+        if n_ws < 5:
+            logger.warning(
+                "TOP5_DARALMA_ALERT ws_subscriptions=%d "
+                "(S' gate riski; daralma manuel onay gerektirir)",
+                n_ws,
+            )
+
+    def _aggregate_report(self) -> dict:
+        """B3.1: aggregate metrics; rapor şeması B3.1 kapanışında DURUM §12."""
+        report = self.metrics.to_dict(",".join(sorted(self.symbols)))
+        report["ws_symbols"] = sorted(self.symbols)
+        report["watch_symbols"] = sorted(self._watch_symbols)
+        report["quarantined"] = sorted(self.universe._quarantine_until_ms.keys()) \
+            if self.universe is not None else []
+        return report
+
     async def run(self) -> dict:
         timeout = aiohttp.ClientTimeout(total=5.0)
         self._setup_db()
@@ -608,26 +779,35 @@ class ShadowRunner:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 self.rest = MEXCRestClient(session)
 
-                # contract_size for USDT normalization
-                try:
-                    self._contract_size = await self.rest.fetch_contract_size(
-                        self.symbol
+                # contract_size per symbol
+                for symbol in sorted(self.symbols):
+                    try:
+                        cs = await self.rest.fetch_contract_size(symbol)
+                        self._contract_size[symbol] = cs
+                        logger.warning(
+                            "contract_size symbol=%s size=%s", symbol, cs
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "fetch_contract_size failed symbol=%s: %s "
+                            "-> default 0.0001",
+                            symbol,
+                            e,
+                        )
+                        self._contract_size[symbol] = 0.0001
+
+                # B3.1: UniverseService (rotation opsiyonel)
+                if self._enable_rotation:
+                    self.universe = UniverseService(
+                        rest=self.rest,
+                        fetcher_config=FetcherConfig(),
+                        contract_sizes=dict(self._contract_size),
+                        always_include=tuple(sorted(self.symbols)),
+                        excluded_symbols=EXCLUDED_SYMBOLS,
                     )
-                    self.metrics.contract_size = self._contract_size
-                    logger.warning(
-                        "contract_size symbol=%s size=%s",
-                        self.symbol,
-                        self._contract_size,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "fetch_contract_size failed: %s -> default 0.0001", e
-                    )
-                    self._contract_size = 0.0001
-                    self.metrics.contract_size = self._contract_size
 
                 self.ws = MEXCWSClient(
-                    symbols=[self.symbol],
+                    symbols=sorted(self.symbols),
                     on_depth=self.on_depth,
                     on_deal=self.on_deal,
                     ping_interval_s=12.0,
@@ -638,26 +818,17 @@ class ShadowRunner:
 
                 self._install_sigterm()
 
-                # Tickers REST poll (OI + funding)
-                asyncio.create_task(self._tickers_poll_task())
-
-                # WS data starvation watchdog
-                async def ws_watchdog():
-                    while not self._shutdown_event.is_set():
-                        await asyncio.sleep(15)
-                        if self.ws is None:
-                            return
-                        last = getattr(self.ws, "_last_data_mono", 0.0)
-                        now = asyncio.get_event_loop().time()
-                        if last > 0 and now - last > 90.0:
-                            logger.warning(
-                                "WS data starvation %.1fs, triggering shutdown",
-                                now - last,
-                            )
-                            self._shutdown_event.set()
-                            return
-
-                asyncio.create_task(ws_watchdog())
+                # B3.1: background tasks
+                bg_tasks: list[asyncio.Task] = []
+                bg_tasks.append(asyncio.create_task(self._tickers_poll_task()))
+                bg_tasks.append(asyncio.create_task(self._per_symbol_watchdog()))
+                if self.universe is not None:
+                    bg_tasks.append(
+                        asyncio.create_task(self._universe_scan_loop())
+                    )
+                    bg_tasks.append(
+                        asyncio.create_task(self._ws_rotation_loop())
+                    )
 
                 start = time.monotonic()
                 last_flush = time.monotonic()
@@ -671,9 +842,12 @@ class ShadowRunner:
                             break
                         await asyncio.sleep(5.0)
                         logger.info(
-                            "tick pushes=%d valid=%d gaps=%d resyncs=%d "
-                            "stale=%d trades=%d drop=%d side_bad=%d late=%d "
-                            "ohlcv=%d tickers=%d tickers_fail=%d last_v=%d",
+                            "tick ws_subs=%d watch=%d pushes=%d valid=%d "
+                            "gaps=%d resyncs=%d stale=%d trades=%d drop=%d "
+                            "side_bad=%d late=%d ohlcv=%d tickers=%d "
+                            "tickers_fail=%d",
+                            len(self.symbols),
+                            len(self._watch_symbols),
                             self.metrics.pushes,
                             self.metrics.valid,
                             self.metrics.gaps,
@@ -686,8 +860,9 @@ class ShadowRunner:
                             self.metrics.ohlcv_flushed,
                             self.metrics.tickers_polled,
                             self.metrics.tickers_failed,
-                            self.last_applied_version,
                         )
+                        # SORU F=C: Top5→Top4 uyarı otomatik
+                        self._check_top5_daralma()
 
                         if time.monotonic() - last_flush >= 60.0:
                             await self._flush_snapshot()
@@ -717,6 +892,9 @@ class ShadowRunner:
                                 except Exception as e:
                                     logger.warning("cleanup failed: %s", e)
                 finally:
+                    for t in bg_tasks:
+                        t.cancel()
+                    await asyncio.gather(*bg_tasks, return_exceptions=True)
                     await self._flush_snapshot()
                     if self.ws is not None:
                         await self.ws.close()
@@ -724,19 +902,42 @@ class ShadowRunner:
             if self._conn is not None:
                 self._conn.close()
 
-        return self.metrics.to_dict(self.symbol)
+        return self._aggregate_report()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--symbol", default="BTC_USDT")
+    parser.add_argument(
+        "--symbols", default="BTC_USDT",
+        help="virgülle ayrılmış sembol listesi (örn: BTC_USDT,SOL_USDT)",
+    )
+    parser.add_argument(
+        "--symbol", default=None,
+        help="geriye uyum için tek sembol (--symbols'u ezer)",
+    )
     parser.add_argument("--duration", type=int, default=600)
     parser.add_argument("--out", default="shadow_report.json")
     parser.add_argument("--db", default=None, help="SQLite DB path")
+    parser.add_argument(
+        "--enable-rotation", action="store_true",
+        help="B3.1: UniverseService tabanlı WS rotasyonu aktif et",
+    )
     args = parser.parse_args()
 
+    if args.symbol:
+        symbols = [args.symbol]
+    else:
+        symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+    if not symbols:
+        parser.error("en az bir sembol gerekli")
+
     db_path = Path(args.db) if args.db else None
-    runner = ShadowRunner(args.symbol, args.duration, db_path=db_path)
+    runner = ShadowRunner(
+        symbols,
+        args.duration,
+        db_path=db_path,
+        enable_rotation=args.enable_rotation,
+    )
     report = asyncio.run(runner.run())
 
     out_path = Path(args.out)
