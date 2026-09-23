@@ -7,6 +7,7 @@
 # YAMA Y-344: OBI aktif len
 # YAMA Y-353: DI, no global
 # YAMA Y-358: asyncio.Lock
+# SORU B3.2-D: sembol bazli quarantine + is_quarantined API
 
 """
 Micro trigger - FVG_OTE state machine + hard deadline + paused accumulation.
@@ -17,6 +18,10 @@ States (ascending priority):
 Per-symbol state. Timer cancellable. Paused_ms accumulates even when
 input is invalid (Y-255). Hard deadline 600000 ms (Y-280) fires
 FVG_EXPIRED_HARD_DEADLINE regardless of validity.
+
+SORU B3.2-D: quarantine — sembol bazli devre disi birakma, global
+shutdown yok. quarantine_until_ms monotonik; suresi dolunca sembol
+otomatik yeniden aktif.
 """
 
 from __future__ import annotations
@@ -82,6 +87,7 @@ class SymbolTriggerState:
     last_exchange_ts_ms: int = 0
     last_mono_ms: int = 0
     was_paused: bool = False
+    quarantine_until_ms: int = 0  # SORU B3.2-D: monotonik ms
 
 
 def _monotonic_ms() -> int:
@@ -102,6 +108,7 @@ class MicroTrigger:
 
     FVG_EXPIRED_HARD_DEADLINE = "FVG_EXPIRED_HARD_DEADLINE"
     FVG_INVALIDATED = "FVG_INVALIDATED"
+    MICRO_TRIGGER_QUARANTINE = "MICRO_TRIGGER_QUARANTINE"
 
     def __init__(
         self,
@@ -142,7 +149,10 @@ class MicroTrigger:
         return False
 
     def _reset_to_idle(self, symbol: str) -> None:
-        """Y-294: reset resets paused_ms ve last_seen."""
+        """Y-294: reset resets paused_ms ve last_seen.
+
+        SORU B3.2-D: quarantine_until_ms ortogonal; reset etkilenmez.
+        """
         st = self._states[symbol]
         st.state = MicroTriggerState.IDLE
         st.sweep_started_ms = 0
@@ -162,6 +172,31 @@ class MicroTrigger:
 
     def get_paused_ms(self, symbol: str) -> float:
         return self._states[symbol].paused_ms
+
+    # --------------------------------------------------------------- quarantine
+    # SORU B3.2-D: sembol bazli devre disi birakma.
+
+    def is_quarantined(self, symbol: str) -> bool:
+        """Sembol su anda quarantine altinda mi?"""
+        return self._states[symbol].quarantine_until_ms > _monotonic_ms()
+
+    def quarantine(self, symbol: str, reason: str) -> None:
+        """Sembolu quarantine_ms boyunca devre disi birak; state IDLE'a doner.
+
+        Global shutdown yok (SORU B3.2-D=A).
+        """
+        st = self._states[symbol]
+        until = _monotonic_ms() + self._config.quarantine_ms
+        st.quarantine_until_ms = until
+        st.state = MicroTriggerState.IDLE
+        logger.warning(
+            "MICRO_TRIGGER_QUARANTINE symbol=%s reason=%s until_ms=%d",
+            symbol, reason, until,
+        )
+        self._emit(
+            self.MICRO_TRIGGER_QUARANTINE,
+            {"symbol": symbol, "reason": reason, "until_ms": until},
+        )
 
     # --------------------------------------------------------------- timer
 
@@ -235,6 +270,10 @@ class MicroTrigger:
             st = self._states[symbol]
             now_mono = self._now_mono()
             now_wall = _wall_ms()
+
+            # SORU B3.2-D: quarantine altinda evaluate no-op.
+            if st.quarantine_until_ms > now_mono:
+                return st.state
 
             # Y-280 / Y-306: hard deadline fires even when is_valid=False
             if (
@@ -317,6 +356,9 @@ class MicroTrigger:
             for symbol in symbols:
                 if shutdown_event.is_set():
                     break
+                # SORU B3.2-D: quarantined sembolu atla
+                if self.is_quarantined(symbol):
+                    continue
                 try:
                     tick = await tick_provider(symbol)
                 except Exception as e:
@@ -346,6 +388,7 @@ class MicroTrigger:
                     logger.warning(
                         "evaluate failed symbol=%s err=%s", symbol, e
                     )
+                    self.quarantine(symbol, "evaluate_error")
 
                 await self.cancellable_sleep(
                     symbol, self._config.timer_sleep_ms, shutdown_event

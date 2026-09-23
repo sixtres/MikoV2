@@ -275,12 +275,18 @@ Ajan, mevcut kodu/dökümanı incelemek için tam link veya dosya yolu ister.
 - Link mesaj içinde verilir; kullanıcı tıklar, içeriği kopyalar, asistana gönderir
 - Ajan dosya içeriğini görmeden varsayım yapmaz
 - Local-only dosyalarda kullanıcı direkt içeriği paylaşır
+- Dosyalar iki ayrı liste halinde verilir: (1) GitHub linkleri, (2) local yollar. Her iki liste de alfabetik sıralıdır.
 
 6.2 Örnek
 Kullanıcı: "Cache modülü için mevcut kodları inceleyelim."
-Asistan: "Şu dosyaları paylaşır mısın:
-    https://github.com/<org>/<repo>/blob/main/src/cache/store.py
-    https://github.com/<org>/<repo>/blob/main/src/cache/policy.py"
+Asistan: "Şu dosyaları paylaşır mısın: (Alfabetik sıralı olmalı)
+	GitHub linkleri (alfabetik):
+	https://github.com/sixtres/MikoV2/blob/main/src/backtest/engine.py
+	https://github.com/sixtres/MikoV2/blob/main/src/backtest/replay_transport.py
+
+	Local yollar (alfabetik):
+	src/backtest/engine.py
+	src/backtest/replay_transport.py"
 
 6.3 Kapsam
 GitHub projeleri için link, local projeler için direkt içerik. Local güncel kod, remote'dan daha doğrudur.
@@ -334,7 +340,10 @@ SSOT gereği kopya olması gereken yerde atıf mı, atıf olması gereken yerde 
 
 Kontrol 6 — Test (döküman çıktılarında N/A):
 Kural ve maddeler §7.7'de tanımlıdır. Uygulanıp uygulanmadığı bu maddede kontrol edilir.
-
+[ ] Kaynak değişikliği kapsamı ile test kapsamı eşleşiyor mu?
+    (Yeni/değişen her davranış için test var mı, test incelemesi
+    yapıldı mı?)
+	
 Kontrol 7 — Mantık/Semantik:
 Kod hangi YAMA/karara hizmet ediyor? (izlenebilirlik)
 En az 1 pozitif + 1 negatif trace gösterildi mi?
@@ -427,41 +436,57 @@ Yeni dosya iskeletleri ve tam dosya çıktıları da bu kapsamdadır; sadece §7
 7.6.1 Yapı
 Her kod teslimi şu bölümleri içerir:
 1. Hedef: Hangi YAMA/karar için
-2. Dosyalar: Değişen dosyalar listesi
+2. Dosyalar: Değişen + yeni dosyalar (kaynak + test)
 3. Diff Özeti: Ne eklendi/silindi
-4. Test: Çalıştırılan komut ve sonuç (komut ANAYASA.md'den - §7.7.1)
-5. Kod Bloğu (4-backtick dış blokta, içerik doğrudan kod olarak verilir; iç içe blok kullanılmaz; örnekler için §7.6.3'e bak)
-
+4. Kod Bloğu (4-backtick dış blokta, içerik doğrudan kod olarak
+   verilir; iç içe blok kullanılmaz; örnekler için §7.6.3'e bak)
+5. Test: Çalıştırılan komut ve sonuç (komut ANAYASA.md'den - §7.7.1).
+   Konum: TÜM kod blokları üretildikten SONRA, "Not:" bölümünden
+   HEMEN ÖNCE. Kod bloklarının arasına gömülmez; mesajın sonuna
+   yakın tek bir blok halinde verilir. Format:   
+   
+       Test:
+       Komut: <ANAYASA.test_komutu>
+       Sonuç: <N PASS | PENDING USER EXECUTION | FAIL>
+   
+   Gerekçe: Test sonucu tüm kodun bütünlüğüne dair bir beyandır; kod
+   parçalarının arasında verildiğinde kapsam belirsizleşir. Mesaj
+   sonunda tek blok halinde verildiğinde hangi teslime ait olduğu
+   tartışmasız olur.
+   
 7.6.2 Kurallar
 - Minimal değişiklik. Gereksiz refactor yok.
 - Kapsam aşımı yok (scope creep). İstenmeyen dosyaya dokunma.
 - Mevcut koddan bahsediliyorsa sadece kullanıcının verdiği içerikten.
 - Teslim sırasında "Eski hali" ve "Yeni hali" kod parçaları AYRI 4-backtick
-  bloklarında verilir. Her blokun İLK satırı, hedef dosyanın yolunu yorum
-  olarak içerir. Yorum karakteri ilgili dilin sözdizimine uygundur:
-    Python: # src/module.py
-    JavaScript/TypeScript: // src/file.js
-    SQL:    -- schema.sql
-    YAML:   # config.yaml
-    Diğer diller: o dilin standart yorum karakteri.
-  Gerekçe: Aynı mesajda birden çok dosya diff'i verildiğinde hangi bloğun
-  hangi dosyaya ait olduğu tek bakışta görülür; kullanıcı kopyala-yapıştır
-  sırasında yanlış dosyaya yazmaz.
-- Kod parçaları, hedef dosyadaki GERÇEK indentasyonu korur. Kısmi diff
-  verilirken parçanın hangi kapsamda (class/def/if/with bloğu) yaşadığını
-  gösteren yeterli üst bağlam verilir:
-    (a) kapsam başlığı satırı (class/def/if satırı) gösterilir, ya da
-    (b) parça kapsam ortasından başlıyorsa bağlam işaretleyicisi kullanılır:
-        Python: # ... (üst satırlar) ...
-    Anlamsız girinti (hangi kapsamda olduğu belirsiz 8 boşluklu satır)
-    YASAK. Kısmi parça "kendi başına çalışan kod" gibi değil, "alındığı
-    kapsamla birlikte" sunulur.
-  Gerekçe: Okuyucu 8 boşluk girintiyi gördüğünde içinde bulunduğu
-  class/def'i bilmeden satırı doğru yere kopyalayamaz; yanlış indentasyon
-  Python'da SyntaxError üretir.
-- Yeni dosya (tam dosya çıktısı) tesliminde "ilk satır dosya yolu" kuralı
-  uygulanmaz; dosya yolu §7.6.1'deki "Dosyalar:" başlığında zaten
-  belirtilir ve dosyanın kendi içeriği kendi yorum başlığını taşıyabilir.
+  bloklarında verilir. Eski/Yeni hali bloklarında dosya yolu yorumu
+  YAZILMAZ (kopyala-yapıştır akışına uygunluk; PO kararı 2026-09-22).
+  Hangi dosyaya ait olduğu §7.6.1'deki "Dosyalar:" başlığından okunur.
+- Kısmi patch bloklarında `...` işaretleyicisi YASAK. Kısmi patch'te ya tüm etkilenen
+  satırlar açıkça yazılır, ya tam dosya verilir.
+- KAYNAK DEĞİŞİKLİĞİ → TEST KONTROLÜ ZORUNLU:
+  (a) Yeni fonksiyon/metot/sınıf/modül eklendiğinde: aynı teslimde
+      ilgili unit test dosyası da verilir.
+  (b) Mevcut fonksiyon/metot/sınıf değiştirildiğinde (imza, dönüş
+      tipi, sözleşme, yan etki, iç mantık veya sınır davranışı):
+      ilgili test(ler) gözden geçirilir. Davranış değiştiyse test
+      patch'i aynı teslimde verilir; davranış değişmediyse teslim
+      mesajına "Test incelemesi: <test dosyası> — değişiklik
+      gerekmedi, <gerekçe>" satırı eklenir.
+  (c) Test dosyası eksik teslim Mod 2 teslimi sayılmaz; §7.7 test
+      kapısı uygulanmaz; §7.6.1 yapısı eksik kabul edilir
+      (§7.8.1 kontrolü PASS vermez).
+  (d) Test dosyası adı ve yolu §7.6.1 madde 2 "Dosyalar:" listesinde
+      belirtilir.
+  (e) Mevcut test dosyasına ek/patch verilecekse: dosyanın güncel
+      tam hali veya açık diff verilir; `...` ile test atlanamaz
+      (§7.6.2 `...` yasağı ile uyumlu).
+	  
+- Yeni dosya (tam dosya çıktısı) tesliminde de dosya yolu, kod bloğunun
+  hemen üstünde tek satır olarak yazılır (o dilin yorum karakteriyle;
+  örn: # tests/shadow/runner.py). Bu kural, eski/yeni hali bloklarındaki
+  kopyala-yapıştır akışıyla aynı amaca hizmet eder. Dosya ayrıca
+  §7.6.1'deki "Dosyalar:" başlığında da belirtilir.
 - İstisna: Bu protokol dökümanının kendi örnekleri (§7.6.3) tek 4-backtick
   kısıtı nedeniyle 4-space indentation ile gösterilir; bu istisna yalnızca
   bu dökümanın kendisine aittir.
@@ -472,8 +497,7 @@ Dosyalar: src/cache/policy.py
 Diff: LRU sınıfı eklendi, TTL kaldırıldı
 Test: pytest tests/cache/test_policy.py - 11 PASS
 
-# src/cache/policy.py
-
+src/cache/policy.py
 Eski hali:
     
     class CachePolicy:
@@ -493,8 +517,7 @@ Not: Yukarıdaki "Eski hali:" ve "Yeni hali:" başlıklarının altındaki kod
 parçaları, bu dökümanın kendisi tek 4-backtick bloğunda sunulduğu ve
 içinde 3-backtick/4-backtick iç içe kullanımı yasak olduğu için (§7.5),
 ayrı 4-backtick blokları yerine 4-space indentation ile gösterilmiştir.
-Gerçek teslim sırasında §7.6.2'deki ayrı blok kuralı ve "eski halinin 
-bir üst satırında hedef dosya yolu yorumu" kuralı geçerlidir.
+Gerçek teslim sırasında §7.6.2'deki ayrı blok kuralı ve "eski halinden önce hedef dosya yolu" kuralı geçerlidir.
 
 7.6.4 Kapsam
 Sadece Mod 2'de kullanılır.
@@ -512,7 +535,12 @@ Evrensel format: {ANAYASA.test_komutu} (örneğin pytest, npm test, go test ./..
 - Tüm testler PASS olmalı
 - Flaky taraması yapılır (şüpheli test 2 kez çalıştırılır)
 - Yeni paket eklendiyse versiyon pinlenir (requirements.txt / package.json vb.)
-
+- PO PASS sayısı beyan ettiğinde asistan, DURUM.md §2'deki önceki PASS
+  sayısıyla karşılaştırır. Fark ±2'ye kadar kabul; ±2'yi aşan farkta
+  asistan beyanı DURUM.md'ye yazmadan önce sorgular (yeni test mi, flaky
+  mı, kayıt hatası mı?). Karşılaştırma yapılmadan PASS sayısı DURUM.md'ye
+  yazılmaz ve kapanış ilerlemez.
+  
 7.7.3 Test Başarısızsa ve İstisna Yönetimi
 - Teslim YASAK
 - Push YASAK
@@ -538,14 +566,12 @@ Evrensel format: {ANAYASA.test_komutu} (örneğin pytest, npm test, go test ./..
 [ ] Versiyon/tarih kullanıcı onayı olmadan değiştirilmedi mi? (§11.1)
 [ ] Kapsam aşıldı mı?
 [ ] Değişiklik minimal mi?
-[ ] (Mod 2 ise) §7.6.1 5-bölüm yapısı (Hedef / Dosyalar / Diff Özeti /
-    Test / Kod Bloğu) eksiksiz uygulandı mı?
-[ ] (Mod 2 ise) Eski/Yeni bloklar §7.6.2'ye uygun mu — (a) her blokun
-    ilk satırı hedef dosya yolunu yorum olarak taşıyor mu, (b) bloklar
-    ayrı mı, (c) kodun GERÇEK indentasyonu korunmuş mu, (d) kısmi
-    diff'lerde kapsam bağlamı (class/def satırı veya bağlam
-    işaretleyicisi) verilmiş mi?
-
+[ ] (Mod 2 ise) §7.6.1 5-bölüm yapısı (Hedef / Dosyalar / Diff Özeti / Kod Bloğu / Test) eksiksiz uygulandı mı?
+[ ] (Mod 2 ise) Eski/Yeni bloklar §7.6.2'ye uygun mu -eski halinden önce dosya yolu yazılmış mı —  bloklar ayrı mı?
+[ ] (Mod 2 ise) Teslimdeki her kaynak değişikliği için test kontrolü
+    yapıldı mı? Yeni davranış → yeni test; değişen davranış → test
+    patch'i; değişmeyen davranış → "Test incelemesi:" satırı var mı?
+	
 7.8.2 İhlal Durumu
 Herhangi bir madde işaretlenmiyorsa mesaj gönderilmez; düzeltilir, kontrol tekrarlanır. İhlal §10'a göre kaydedilir.
 

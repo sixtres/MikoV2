@@ -1,3 +1,4 @@
+# tests/shadow/runner.py
 """
 MEXC Futures shadow runner (manual, live network).
 
@@ -14,6 +15,19 @@ Bootstrap order:
   7. Live: depth -> L2Buffer -> 60s SQLite flush
            deal  -> 1s OHLCV USDT-normalized bucket -> SQLite flush
            ticker poll (60s) -> OI + mark + funding -> tickers_snapshot
+  8. B3.2: MicroTrigger live evaluation (5s) + Strategy shadow
+  9. B3.3: PaperPositionManager live paper trading
+
+B3.3 integration points:
+  - __init__: self._paper placeholder
+  - _setup_db: PaperPositionManager init + setup_db()
+  - _apply_push: on_ws_tick(mid)  [B3.3-B.3 freshness]
+  - _on_ohlcv_1s: on_ohlcv(OhlcvSample)
+  - _insert_ticker_snapshot: on_ticker(funding)
+  - _micro_trigger_loop: current_position_qty (A.3) + on_entry
+    on TRIGGER (B3.2-A preserves MicroTrigger as sole live
+    decision-maker)
+  - run(): on_startup (D.6) + finalize (N4: END_OF_BACKTEST)
 """
 
 from __future__ import annotations
@@ -25,6 +39,7 @@ import logging
 import signal
 import sqlite3
 import time
+from collections import deque
 from pathlib import Path
 
 import aiohttp
@@ -40,6 +55,29 @@ from src.data_layer.universe_service import (
     UniverseService,
     RotationDecision,
     ScanResult,
+)
+from src.features.micro_trigger import (
+    MicroTrigger,
+    MicroTriggerConfig,
+    MicroTriggerState,
+)
+from src.backtest.signal_detector import (
+    SignalDetector,
+    DetectorConfig,
+    SignalKind,
+    Signal,
+)
+from src.backtest.strategy import (
+    Strategy,
+    StrategyConfig,
+    EntrySignal,
+    Direction,
+)
+from src.backtest.replay_transport import OHLCVEvent, TickerEvent
+from src.execution.paper_position_manager import (
+    OhlcvSample,
+    PaperPositionConfig,
+    PaperPositionManager,
 )
 
 logging.basicConfig(
@@ -149,6 +187,111 @@ class ShadowRunner:
         self.rest: MEXCRestClient | None = None
         self.ws: MEXCWSClient | None = None
 
+        # B3.3: Paper position manager; _setup_db sonrası initialize edilir
+        # (conn bağımlı). Bu satır None; _setup_db içinde set edilir.
+        self._paper: PaperPositionManager | None = None
+
+        # B3.2: MicroTrigger + Strategy shadow
+        self._mt_config = MicroTriggerConfig()
+        self._strategy_config = StrategyConfig(
+            entry_window_ms=15000,
+            min_whale_trust=0,
+            require_sweep=True,
+            require_mss=True,
+            require_fvg=True,
+            require_ote=False,
+            cooldown_ms=60000,
+        )
+        self._detector_config = DetectorConfig(
+            candle_seconds=5,
+            sweep_lookback=20,
+            sweep_wick_ratio=0.6,
+            mss_lookback=10,
+            fvg_min_size_pct=0.0005,
+            ote_low=0.62,
+            ote_high=0.79,
+            ote_lookback=20,
+            max_history=300,
+        )
+        self._mt_detectors: dict[str, SignalDetector] = {}
+        self._micro_triggers: dict[str, MicroTrigger] = {}
+        self._recent_signals: dict[str, deque] = {}
+        self._last_mt_state: dict[str, MicroTriggerState] = {}
+        self._shadow_strategies: dict[str, Strategy] = {}
+        self._shadow_detectors: dict[str, SignalDetector] = {}
+        self._last_price: dict[str, float] = {}
+        self._last_exchange_ts: dict[str, int] = {}
+        self._mt_loop_task: asyncio.Task | None = None
+
+        # Initialize per-symbol state for initial symbols
+        for sym in self.symbols:
+            self._init_symbol_state(sym)
+
+    def _init_symbol_state(self, symbol: str) -> None:
+        """Initialize B3.2 components for a symbol."""
+        if symbol in self._mt_detectors:
+            return
+        self._mt_detectors[symbol] = SignalDetector(self._detector_config)
+        self._micro_triggers[symbol] = MicroTrigger(
+            self._mt_config, self._emit_micro_event
+        )
+        self._recent_signals[symbol] = deque(maxlen=200)
+        self._last_mt_state[symbol] = MicroTriggerState.IDLE
+        shadow_detector = SignalDetector(self._detector_config)
+        self._shadow_detectors[symbol] = shadow_detector
+        self._shadow_strategies[symbol] = Strategy(
+            self._strategy_config, shadow_detector
+        )
+        self._last_price[symbol] = 0.0
+        self._last_exchange_ts[symbol] = 0
+
+    def _emit_micro_event(self, event_type: str, payload: dict) -> None:
+        """Callback for MicroTrigger events (state transitions, deadlines)."""
+        log_entry = {
+            "event": event_type,
+            "source": "MICRO_TRIGGER",
+            **payload,
+        }
+        logger.info(json.dumps(log_entry))
+
+    def _log_entry_signal(
+        self,
+        source: str,
+        symbol: str,
+        direction: Direction,
+        price: float,
+        ts_ms: int,
+        reason: str,
+    ) -> None:
+        log_entry = {
+            "event": "ENTRY_SIGNAL",
+            "source": source,
+            "symbol": symbol,
+            "direction": direction.value,
+            "price": price,
+            "ts_ms": ts_ms,
+            "reason": reason,
+        }
+        logger.info(json.dumps(log_entry))
+
+    def _determine_direction(
+        self, symbol: str, recent: deque
+    ) -> Direction | None:
+        kinds = {s.kind for _, s in recent}
+        if (
+            SignalKind.SWEEP_DOWN in kinds
+            and SignalKind.MSS_UP in kinds
+            and SignalKind.FVG_BULLISH in kinds
+        ):
+            return Direction.LONG
+        if (
+            SignalKind.SWEEP_UP in kinds
+            and SignalKind.MSS_DOWN in kinds
+            and SignalKind.FVG_BEARISH in kinds
+        ):
+            return Direction.SHORT
+        return None
+
     # ---------------------------------------------------------------- depth
 
     def _parse_diffs(self, data: dict) -> list[tuple[str, float, float]]:
@@ -181,6 +324,22 @@ class ShadowRunner:
             self.metrics.obi_samples.append(self.l2_buffer.get_obi(symbol))
         except Exception:
             pass
+        # B3.3: paper last_price (best bid/ask mid) güncelle.
+        # B3.3-B.3: on_ws_tick her tick'te çağrılır; freshness böylece
+        # paper_manager tarafında tazelenir.
+        if self._paper is not None:
+            try:
+                if book.bids_len > 0 and book.asks_len > 0:
+                    mid = (
+                        float(book.bids_price[0])
+                        + float(book.asks_price[0])
+                    ) / 2.0
+                    if mid > 0.0:
+                        self._paper.on_ws_tick(symbol, mid)
+            except Exception as e:
+                logger.warning(
+                    "paper on_ws_tick failed symbol=%s: %s", symbol, e
+                )
 
     def _apply_snapshot(self, symbol: str, snap: dict) -> None:
         book = self.l2_buffer.create_book(symbol)
@@ -240,7 +399,7 @@ class ShadowRunner:
 
         self._apply_push(symbol, data)
         self.metrics.valid += 1
-        self.last_applied_version[symbol] = version    
+        self.last_applied_version[symbol] = version
 
     async def on_deal(self, symbol: str, trades: list) -> None:
         """Handle push.deal batch -> 1s OHLCV USDT-normalized aggregation."""
@@ -288,6 +447,7 @@ class ShadowRunner:
         if b is None or b["sec"] != sec:
             if b is not None:
                 self._flush_ohlcv_sync(symbol, b)
+                self._on_ohlcv_1s(symbol, b)
             b = {
                 "sec": sec,
                 "open": price,
@@ -310,6 +470,61 @@ class ShadowRunner:
         else:
             b["sell_vol"] += usdt_vol
         b["count"] += 1
+        self._last_price[symbol] = price
+
+    def _on_ohlcv_1s(self, symbol: str, b: dict) -> None:
+        """Feed completed 1s OHLCV to detectors and shadow strategy."""
+        ev = OHLCVEvent(
+            sec=b["sec"],
+            ts_ms=b["sec"] * 1000,
+            open=b["open"],
+            high=b["high"],
+            low=b["low"],
+            close=b["close"],
+            buy_vol=b["buy_vol"],
+            sell_vol=b["sell_vol"],
+            trade_count=b["count"],
+            symbol=symbol,
+            source_seq=b["sec"],
+        )
+        # Feed to MicroTrigger detector
+        mt_det = self._mt_detectors.get(symbol)
+        if mt_det is not None:
+            signals = mt_det.feed_ohlcv_1s(ev)
+            for s in signals:
+                self._recent_signals[symbol].append((s.ts_ms, s))
+        # Feed to shadow Strategy
+        strat = self._shadow_strategies.get(symbol)
+        if strat is not None:
+            entries = strat.on_ohlcv(ev)
+            for entry in entries:
+                self._log_entry_signal(
+                    source="STRATEGY",
+                    symbol=symbol,
+                    direction=entry.direction,
+                    price=entry.price,
+                    ts_ms=entry.ts_ms,
+                    reason=entry.reason,
+                )
+        self._last_exchange_ts[symbol] = ev.ts_ms
+        self._last_price[symbol] = ev.close
+        # B3.3: paper manager'a tamamlanmış 1s OHLCV besle.
+        # paper_manager içeride 5s kova birleştirmesi yapar (parite).
+        if self._paper is not None:
+            try:
+                self._paper.on_ohlcv(OhlcvSample(
+                    symbol=symbol,
+                    sec=b["sec"],
+                    ts_ms=b["sec"] * 1000,
+                    open=b["open"],
+                    high=b["high"],
+                    low=b["low"],
+                    close=b["close"],
+                ))
+            except Exception as e:
+                logger.warning(
+                    "paper on_ohlcv failed symbol=%s: %s", symbol, e
+                )
 
     def _flush_ohlcv_sync(self, symbol: str, b: dict) -> None:
         if self._conn is None:
@@ -395,6 +610,34 @@ class ShadowRunner:
             self._conn.commit()
         except Exception as e:
             logger.warning("ticker insert failed: %s", e)
+
+        # B3.2: feed ticker to shadow strategy
+        symbol = ticker["symbol"]
+        strat = self._shadow_strategies.get(symbol)
+        if strat is not None:
+            ev = TickerEvent(
+                ts_ms=ticker["ts_ms"],
+                last_price=ticker["last_price"],
+                fair_price=ticker["fair_price"],
+                index_price=ticker["index_price"],
+                hold_vol=ticker["hold_vol"],
+                oi_usdt=oi_usdt,
+                funding_rate=funding["funding_rate"],
+                next_settle_ms=funding["next_settle_ms"],
+                symbol=symbol,
+                source_seq=0,
+            )
+            strat.on_ticker(ev)
+        # B3.3: paper manager'a funding rate besle
+        if self._paper is not None:
+            try:
+                self._paper.on_ticker(
+                    symbol, funding["funding_rate"], ticker["ts_ms"],
+                )
+            except Exception as e:
+                logger.warning(
+                    "paper on_ticker failed symbol=%s: %s", symbol, e
+                )
 
     # ---------------------------------------------------------------- bootstrap
 
@@ -524,7 +767,8 @@ class ShadowRunner:
             symbol,
             applied,
             self.last_applied_version[symbol],
-        )    
+        )
+
     # ---------------------------------------------------------------- flush
 
     async def _flush_snapshot(self) -> None:
@@ -631,6 +875,19 @@ class ShadowRunner:
         )
         self._conn.commit()
 
+        # B3.3: paper manager init (setup_db idempotent; C-PROD default)
+        self._paper = PaperPositionManager(
+            PaperPositionConfig(),
+            self._conn,
+        )
+        self._paper.setup_db()
+        logger.warning(
+            "B3_3_PAPER_MANAGER_INIT profile=%s risk_pct=%.4f global=%d",
+            self._paper._cfg.config_profile_tag,
+            self._paper._cfg.risk_pct,
+            self._paper._cfg.max_positions_global,
+        )
+
     def _install_sigterm(self) -> None:
         try:
             loop = asyncio.get_event_loop()
@@ -712,6 +969,8 @@ class ShadowRunner:
                         logger.warning(
                             "cs fetch failed symbol=%s: %s", sym, e
                         )
+                # B3.2: init new symbol state
+                self._init_symbol_state(sym)
                 logger.warning("B3_1_SUBSCRIBE symbol=%s", sym)
             except Exception as e:
                 logger.warning("subscribe failed symbol=%s: %s", sym, e)
@@ -752,6 +1011,123 @@ class ShadowRunner:
                     self._shutdown_event.set()
                     return
 
+    async def _micro_trigger_loop(self) -> None:
+        """B3.2: evaluate MicroTrigger every timer_sleep_ms (5s).
+
+        SORU B3.2-D: quarantined semboller atlanir; evaluate exception
+        sembolu quarantine eder (global shutdown yok).
+
+        B3.3: TRIGGER anında PaperPositionManager.on_entry çağrılır;
+        current_position_qty paper manager'dan beslenir (A.3).
+        """
+        while not self._shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self._mt_config.timer_sleep_ms / 1000.0,
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+            now_ms = int(time.time() * 1000)
+            now_mono = time.monotonic()
+            for symbol in sorted(self.symbols):
+                if symbol not in self._micro_triggers:
+                    continue
+                # SORU B3.2-D: quarantined sembolu atla
+                if self._micro_triggers[symbol].is_quarantined(symbol):
+                    continue
+                last_data = self._last_ws_data_mono.get(symbol, 0.0)
+                is_valid = (now_mono - last_data) < 5.0 if last_data > 0 else False
+                recent = self._recent_signals.get(symbol, deque())
+                sweep_detected = any(
+                    s.kind in (SignalKind.SWEEP_UP, SignalKind.SWEEP_DOWN)
+                    and now_ms - s.ts_ms <= 10000
+                    for _, s in recent
+                )
+                mss_detected = any(
+                    s.kind in (SignalKind.MSS_UP, SignalKind.MSS_DOWN)
+                    and now_ms - s.ts_ms <= self._mt_config.mss_timeout_ms
+                    for _, s in recent
+                )
+                fvg_detected = any(
+                    s.kind in (SignalKind.FVG_BULLISH, SignalKind.FVG_BEARISH)
+                    and now_ms - s.ts_ms <= self._mt_config.fvg_timeout_ms
+                    for _, s in recent
+                )
+                micro_confirmed = any(
+                    s.kind in (SignalKind.OTE_LONG, SignalKind.OTE_SHORT)
+                    and now_ms - s.ts_ms <= 30000
+                    for _, s in recent
+                )
+                exchange_ts_ms = self._last_exchange_ts.get(symbol, 0)
+                # B3.3-A.3: açık paper pozisyonu varsa geri besle.
+                current_position_qty = 0.0
+                if self._paper is not None:
+                    try:
+                        current_position_qty = (
+                            self._paper.get_open_position_qty(symbol)
+                        )
+                    except Exception:
+                        current_position_qty = 0.0
+                try:
+                    new_state = await self._micro_triggers[symbol].evaluate(
+                        symbol,
+                        is_valid=is_valid,
+                        sweep_detected=sweep_detected,
+                        mss_detected=mss_detected,
+                        fvg_detected=fvg_detected,
+                        micro_confirmed=micro_confirmed,
+                        exchange_ts_ms=exchange_ts_ms,
+                        current_position_qty=current_position_qty,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "micro_trigger evaluate failed symbol=%s: %s", symbol, e
+                    )
+                    # SORU B3.2-D: hata -> sembol bazli quarantine, global yok
+                    self._micro_triggers[symbol].quarantine(
+                        symbol, "evaluate_error"
+                    )
+                    continue
+                prev_state = self._last_mt_state.get(
+                    symbol, MicroTriggerState.IDLE
+                )
+                if (
+                    new_state == MicroTriggerState.TRIGGER
+                    and prev_state != MicroTriggerState.TRIGGER
+                ):
+                    direction = self._determine_direction(symbol, recent)
+                    if direction is not None:
+                        price = self._last_price.get(symbol, 0.0)
+                        self._log_entry_signal(
+                            source="MICRO_TRIGGER",
+                            symbol=symbol,
+                            direction=direction,
+                            price=price,
+                            ts_ms=now_ms,
+                            reason="micro_trigger",
+                        )
+                        # B3.3: paper entry (Direction -> str for
+                        # PaperPositionManager API)
+                        if self._paper is not None:
+                            try:
+                                await self._paper.on_entry(
+                                    symbol=symbol,
+                                    direction=direction.value,
+                                    signal_ts_ms=now_ms,
+                                    last_price=price,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "paper on_entry failed symbol=%s: %s",
+                                    symbol, e,
+                                )
+                    self._micro_triggers[symbol]._reset_to_idle(symbol)
+                    self._last_mt_state[symbol] = MicroTriggerState.IDLE
+                else:
+                    self._last_mt_state[symbol] = new_state
+
     def _check_top5_daralma(self) -> None:
         """SORU F=C: Top5→Top4 uyarı otomatik; daralma manuel onaylı."""
         n_ws = len(self.symbols)
@@ -769,11 +1145,30 @@ class ShadowRunner:
         report["watch_symbols"] = sorted(self._watch_symbols)
         report["quarantined"] = sorted(self.universe._quarantine_until_ms.keys()) \
             if self.universe is not None else []
+        # B3.3: paper metrics summary
+        if self._paper is not None:
+            try:
+                report["paper_open_positions"] = (
+                    self._paper.get_open_position_count()
+                )
+                report["paper_closed_trades"] = len(
+                    self._paper.closed_trades
+                )
+                report["paper_equity"] = round(self._paper.equity, 4)
+            except Exception:
+                pass
         return report
 
     async def run(self) -> dict:
         timeout = aiohttp.ClientTimeout(total=5.0)
         self._setup_db()
+        # B3.3-D.6: startup rehydration (açık paper pozisyonlar)
+        if self._paper is not None:
+            try:
+                loaded = self._paper.on_startup()
+                logger.warning("B3_3_PAPER_REHYDRATED count=%d", loaded)
+            except Exception as e:
+                logger.warning("paper on_startup failed: %s", e)
 
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -829,6 +1224,8 @@ class ShadowRunner:
                     bg_tasks.append(
                         asyncio.create_task(self._ws_rotation_loop())
                     )
+                # B3.2: micro trigger loop
+                bg_tasks.append(asyncio.create_task(self._micro_trigger_loop()))
 
                 start = time.monotonic()
                 last_flush = time.monotonic()
@@ -845,7 +1242,7 @@ class ShadowRunner:
                             "tick ws_subs=%d watch=%d pushes=%d valid=%d "
                             "gaps=%d resyncs=%d stale=%d trades=%d drop=%d "
                             "side_bad=%d late=%d ohlcv=%d tickers=%d "
-                            "tickers_fail=%d",
+                            "tickers_fail=%d paper_open=%d paper_closed=%d",
                             len(self.symbols),
                             len(self._watch_symbols),
                             self.metrics.pushes,
@@ -860,6 +1257,10 @@ class ShadowRunner:
                             self.metrics.ohlcv_flushed,
                             self.metrics.tickers_polled,
                             self.metrics.tickers_failed,
+                            self._paper.get_open_position_count()
+                                if self._paper is not None else 0,
+                            len(self._paper.closed_trades)
+                                if self._paper is not None else 0,
                         )
                         # SORU F=C: Top5→Top4 uyarı otomatik
                         self._check_top5_daralma()
@@ -899,6 +1300,16 @@ class ShadowRunner:
                     if self.ws is not None:
                         await self.ws.close()
         finally:
+            # B3.3-N4: paper pozisyonları kapat (END_OF_BACKTEST).
+            # Not: restart recovery bu yolu kullanmaz; on_startup kullanır.
+            if self._paper is not None:
+                try:
+                    self._paper.finalize(
+                        last_ts_ms=int(time.time() * 1000),
+                        last_prices=dict(self._last_price),
+                    )
+                except Exception as e:
+                    logger.warning("paper finalize failed: %s", e)
             if self._conn is not None:
                 self._conn.close()
 

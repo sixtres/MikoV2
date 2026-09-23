@@ -302,7 +302,7 @@ Asistan dosya içerigini görmeden varsayim yapmaz; interface'i,
 veri tiplerini ve event formatini dosyadan okur.
 6.2 Ornek (projeden bagimsiz)
 Kullanici: "Cache modülü icin mevcut kodlari inceleyelim."
-Asistan: "Su dosyalari paylasir misin:
+Asistan: "Su dosyalari paylasir misin: (alfabetik sıralı vermilmeli)
 https://github.com/<org>/<repo>/blob/main/src/cache/store.py
 https://github.com/<org>/<repo>/blob/main/src/cache/policy.py"
 Kullanici: linkleri acar, içerikleri copy-paste eder.

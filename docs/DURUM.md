@@ -1,12 +1,15 @@
 MikoV2 — DURUM
-Versiyon: v2.14
-Tarih: 2026-09-22
-Durum: B3.1 (çok-sembol kolektör — Top5 WS + Top10 watch) KAPANDI.
-       856 PASS + 1 bilinen transient FAIL (§2 not). Tek commit atıldı
-       (<COMMIT_HASH>). PROTOKOL.md v3.4 yürürlükte (v3.3 + v3.4
-       kümülatif; v3.2'den türetildi). B3.2 sırada.
-Sıradaki: B3.2 — Micro-trigger canlı (WS tick -> detector -> signal ->
-          strategy). SORU SS=C sırası: B3.2 → B3.3 → B3.4 → B3.5.
+Versiyon: v2.18
+Tarih: 2026-09-23
+Durum: B3.3 kapandı. Paper position manager canlı canlı paper trading
+       aktif (MicroTrigger TRIGGER -> PaperPositionManager.on_entry
+       -> TP/SL/END exit; SQLite paper_positions + paper_events
+       kalıcı). SORU B3.3-A/B/C/D/E/F kilitli (§11). 914 PASS
+       (+7 runner integration; toplam yeni B3.3 = 30 + 7 = 37).
+       Tek commit B3.3 kapanışında atılacak. PROTOKOL.md v3.3
+       yürürlükte.
+Sıradaki: B3.4 — Alert entegrasyonu (Telegram/Discord).
+          SORU SS=C sırası: B3.4 → B3.5.
 Amaç: Yeni sohbete başlarken bağlamı hızlıca aktarmak.
 PO: Eser Göbekli
 Önceki: REV7 (FAZ 6/7/8 kapanış) → REV9 (dashboard + universe + shadow
@@ -17,17 +20,21 @@ yön fix) → v2.5 (protokol entegrasyonu) → v2.6 (SSOT temizliği) → v2.7
 (B2c başlangıç kriterleri kilitlendi) → v2.8 (B2c kapanış + SORU G/H +
 async telemetry notu) → v2.9 (B2d kapanış: reporting.py + --config-a/b +
 --equity-csv; 750 PASS) → v2.10 (B2e planı kilitli: SORU A′–W; kod
-BAŞLAMADI) → v2.11 (B2e.−1 + B2e.0 kapandı: §6.1/§6.2 compliance +
-multi-symbol altyapı; 783 PASS; SORU X açıldı) → v2.12 (B2e tüm alt
-fazlar kapandı: B2e.1 + B2e.1S + B2e.2 + B2e.2S + B2e.3; 842 PASS;
-CLI --mode single|multi|walkforward + --data-quality-profile;
-multi_report.py G′ şeması) → v2.13 (B3.1 plan Mod 1'de onaylandı;
-SORU A–G kilitli; PROTOKOL.md v3.2 yürürlükte; Mod 2 için dosya
-istekleri sırada) → v2.14 (B3.1 kapandı: mexc_ws dinamik sub;
-universe_service rotation Q1–Q5 dış-ajan sentezi ile; runner
+BAŞLAMADI) → v2.11 (B2e.−1 + B2e.0 kapandı; 783 PASS; SORU X açıldı) →
+v2.12 (B2e tüm alt fazlar kapandı; 842 PASS; CLI --mode single|multi|
+walkforward + --data-quality-profile; multi_report.py G′ şeması) →
+v2.13 (B3.1 plan Mod 1'de onaylandı; SORU A–G kilitli) → v2.14 (B3.1
+kapandı: mexc_ws dinamik sub; universe_service rotation Q1–Q5; runner
 çok-sembol; iki timer; watch REST ticker; per-symbol watchdog;
-856 PASS + 1 bilinen transient FAIL; §6.8 yeni ihlal notu; PROTOKOL.md
-v3.4; tek commit B3.1 kapanış)
+856 PASS + 1 bilinen transient FAIL; §6.8 yeni ihlal notu) → v2.15
+(B3.2 planı Mod 1'de onaylandı; SORU B3.2-A/B/C/D/E kilitlendi) →
+v2.16 (protokol dökümanı geçişi: SOHBET-KAPANIS-PROTOKOLU.md v2.6 →
+PROTOKOL.md v3.3) → v2.17 (B3.2 kapandı: MicroTrigger canlı +
+Strategy shadow + per-symbol quarantine; 877 PASS; SORU B3.2-C
+telemetry revize; SSOT temizliği) → v2.18 (B3.3 kapandı: paper
+position manager canlı; paper_positions + paper_events kalıcı;
+src/trading/paper_math.py ortak math çekirdeği; 914 PASS; §12
+manager.py → order_manager.py bayat atıf düzeltmesi)
 
 0. ÇALIŞMA YÖNTEMİ
 MikoV2 — MEXC Futures (vadeli) kripto trading botu. Kağıt-öncelikli
@@ -43,14 +50,11 @@ gerekiyor.
 Geliştirme döngüsü: Local'de (Windows/PS) kodlama ve test (pytest),
 VM'de (eser_gobekli@mikov2-collector-1) çalıştırma.
 GitHub base URL: https://github.com/sixtres/MikoV2 (dosya isteme
-protokolü için referans; Bkz PROTOKOL.md §6).
-Devir protokolü: PROTOKOL.md v3.4 (projeden bağımsız yöntem dökümanı;
-detay için Bkz PROTOKOL.md §6). Devir sırasında sadece bu dosya
-(DURUM.md) güncellenir; PROTOKOL.md sabit kalır. Eski
-SOHBET-KAPANIS-PROTOKOLU.md v2.6 ezildi.
+protokolü için referans).
 DB yolu (VM): /home/eser_gobekli/MikoV2/data/mikov2.sqlite
 DB şeması: orderbook_snapshots (id PK), trades_ohlcv_1s (sec PK),
-tickers_snapshot (id PK)
+tickers_snapshot (id PK), paper_positions (position_id PK),
+paper_events (id PK)
 Kod kuralları: Bkz AnaYasa REV5 §0.
 
 VM'DEN LOCAL'E DOSYA TRANSFERİ (BAĞLAYICI)
@@ -86,31 +90,34 @@ Not: transfer.sh, 0x0.st kapalı/kısıtlı (2026-09-19 itibariyle).
 | B2e.3|Rapor (G′ şeması + profiller + CLI) (24 test)|Kapandı|
 | B2e kapanış|Tek commit|Kapandı (2026-09-22)|
 | B3.1|Çok-sembol kolektör (Top5 WS + Top10 watch)|Kapandı (2026-09-22)|
+| B3.2|Micro-trigger canlı + Strategy shadow + quarantine|Kapandı (2026-09-23)|
+| B3.3|Position manager paper (canlı canlı paper trading)|Kapandı (2026-09-23)|
 | B2e.real|Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
-| B3.2|Micro-trigger canlı (WS tick -> detector -> signal -> strategy)|Sırada (Mod 1)|
-| B3.3–5|Position manager paper + alert + sigorta (SORU SS=C)|Sırada|
+| B3.4|Alert entegrasyonu (Telegram/Discord)|Sırada|
+| B3.5|Sigorta: 3-4 hafta paper → gerçek para|Sırada|
 
 2. TEST DURUMU
-Toplam: 856 PASS + 1 bilinen transient FAIL.
+Toplam: 914 PASS.
 Alt faz dağılımı: B2d 17; B2e.−1 15; B2e.0 18; B2e.1 11; B2e.1S 8;
-B2e.2 11; B2e.2S 4; B2e.3 24; B3.1 15 (8 unit + 7 integration).
+B2e.2 11; B2e.2S 4; B2e.3 24; B3.1 15 (8 unit + 7 integration);
+B3.2 20 (13 micro_trigger + 7 runner integration); B3.3 37
+(17 paper_math + 13 paper_manager + 7 runner integration).
+§7.7.2 karşılaştırması: 877 (B3.2) → 907 (delivery 1: +30) →
+907 (delivery 2: 0) → 914 (delivery 3: +7). Tüm farklar yeni
+dosya kaynaklı.
 Komut: pytest tests/ -q --tb=short --maxfail=1
-Bilinen transient FAIL: tests/chaos/test_queue_full.py:168
-  (test_drop_oldest_preserves_newest veya test_telemetry_1_by_1_eviction;
-  §6.3'te belgelenen mp.Queue feeder timing kaynaklı; izole koşularda
-  ve tekrar koşularda temiz. B3.1 kapanışını etkilemez.)
+Bilinen transient FAIL (tests/chaos/test_queue_full.py:168) B3.3
+koşusunda gözlenmedi. §6.3'te belgelenen mp.Queue feeder timing
+kaynaklı; izlenmeye devam.
 Yakalanan kritik bug'lar: WS dead silent (pong data maskesi), mp.Queue
 blocking event loop, DROP_OLDEST -> DROP_NEWEST race, 429 circuit
 breaker eksikliği, SWEEP yön mapping tersliği (Bkz §7), SORU G/H
 slippage/SL floor (B2c, Bkz §7), B2e.0 `PositionSimulator.finalize`
 imza değişikliği sonrası `backtest_run.py` çağrısı kırıldı (B2e.3'te
 düzeltildi), B3.1 adım 1 `...` işaretleyicisi kaynaklı `__init__`
-attribute kaybı (Bkz §6.8).
-Not: test_drop_oldest_preserves_newest ve
-test_telemetry_1_by_1_eviction (tests/chaos/test_queue_full.py) full-
-suite yükü altında mp.Queue feeder timing kaynaklı tekil/transient
-FAIL üretebiliyor (Bkz §6.3). İzole koşularda ve son full koşularda
-temiz. İzlenmeye devam.
+attribute kaybı (Bkz §6.8), B3.2 test mock async/sync karışıklığı
+(Bkz §6.9), B3.3 test 5s kova kapanış sınırı (sec_after+1 → +5;
+kaynak değişmedi; kayıt §6.11'de).
 
 3. RUNTIME — VM'DE AKTİF OLAN
 Shadow collector (systemctl status miko-collector):
@@ -120,6 +127,9 @@ L2 depth — orderbook_snapshots (60s interval, 500 seviye)
 Trade OHLCV 1s — trades_ohlcv_1s (USDT-normalized, CVD için)
 Tickers — tickers_snapshot (60s interval, OI + funding)
 WS data-starvation watchdog aktif (90s data gelmezse restart).
+B3.2: MicroTrigger canlı (5s evaluate) + shadow Strategy paralel.
+B3.3: PaperPositionManager canlı (paper trading). paper_positions +
+paper_events tabloları WAL üzerinden aynı DB'ye yazılır.
 Veritabanı: Bkz §0 (WAL mode).
 Dashboard: http://<VM_IP>:8090/ (aiohttp.web, 7 endpoint, Chart.js)
 Not: Kolektör şu an tek sembol (BTC_USDT). Çok-sembol genişleme B3.1
@@ -154,10 +164,13 @@ DB MEVCUT DURUM (2026-09-21):
 | src/backtest/strategy.py|Sinyalleri entry kararına dönüştürür; SORU X — last_rejection_reason (additive)|
 | src/backtest/position_sim.py|B2c entry/TP/SL + PnL; B2e.0 per-symbol state + finalize dict + MTM; SORU N — window_id/fold_id|
 | src/backtest/multi_symbol_runner.py|B2e.1 MultiSymbolRunner (interleaved); B2e.2 WalkForwardRunner + WalkForwardConfig + FoldWindow + FoldResult + WalkForwardResult|
-| src/backtest/multi_report.py|B2e.3 — G′ rapor şeması; SCHEMA_VERSION=1; CLAIM_* enum; build_report saf fonksiyon; data_quality{profile, by_symbol, aggregate}; dropped_entries_by_reason/by_symbol (SORU A3); excluded_symbols{all, effective, version} (SORU BB′)|m
+| src/backtest/multi_report.py|B2e.3 — G′ rapor şeması; SCHEMA_VERSION=1; CLAIM_* enum; build_report saf fonksiyon; data_quality{profile, by_symbol, aggregate}; dropped_entries_by_reason/by_symbol (SORU A3); excluded_symbols{all, effective, version} (SORU BB′)|ateşledi|
 | src/backtest/reporting.py|B2d — genişletilmiş rapor (Sharpe, PF, expectancy, equity curve)|
 | src/backtest/data_quality.py|B2e.0 — gap/completeness detection; B2e.3 — ticker/depth coverage da bu fonksiyonla (SORU XX)|
-| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation|
+| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation. B3.2: MicroTrigger canlı (5s evaluate) + shadow Strategy paralel + TRIGGER → EntrySignal JSON log + per-symbol quarantine skip + _init_symbol_state (rotasyon tetikler). B3.3: PaperPositionManager bağlaması (on_ws_tick, on_ohlcv, on_ticker, TRIGGER → on_entry, A.3 current_position_qty geri besleme, on_startup rehydration, finalize)|
+| src/features/micro_trigger.py|Per-symbol MicroTrigger state machine (IDLE->SWEEP->MSS->FVG_OTE->MICRO_CONFIRM->TRIGGER); paused_ms, hard deadline 600s, quarantine, next_candle, per-symbol asyncio.Lock. B3.2: quarantine_until_ms + is_quarantined() + quarantine(symbol, reason) + MICRO_TRIGGER_QUARANTINE event|
+| src/trading/paper_math.py|B3.3 — ortak math çekirdeği (saf fonksiyonlar); backtest ve paper manager paylaşır. entry slippage, SL/TP mesafesi, qty, fee, R, ATR, funding delta, next_funding_ts_ms|
+| src/execution/paper_position_manager.py|B3.3 — PaperPositionManager (canlı paper trading). on_entry (global asyncio.Lock + stale_price + ATR guard); on_ohlcv (5s kova exit; SL önce; entry_bucket_sec atlanır); on_ws_tick (last_price freshness); on_ticker (funding); on_startup (DB rehydration); finalize (END_OF_BACKTEST); SQLite paper_positions + paper_events (UNIQUE idempotency); get_open_position_qty (A.3)|
 | tests/manual/backtest_run.py|Backtest CLI: --symbol (single); --symbols + --mode (multi|walkforward); --train-ms/--test-ms/--step-ms; --data-quality-profile (legacy|lenient|strict); --config-a/b; --equity-csv; --report|
 
 5. UNIVERSE SCANNER KARARI
@@ -211,9 +224,8 @@ Etki alanı: Sadece threaded_bridge=True (production default). Testler
 threaded_bridge=False kullandığı için bu yol test kapsamı dışı.
 Karar: FAZ sonrası — B2c/B2d/B2e/B3 kapsamı dışı, ayrı commit.
 Doğrulama: KOD İNCELEME (2026-09-20).
-Durum: Not edildi, FAZ sonrasına bırakıldı. Full suite koşularında
-test_drop_oldest_preserves_newest ve test_telemetry_1_by_1_eviction
-ara sıra FAIL (transient). İzole koşularda temiz.
+Durum: Not edildi, FAZ sonrasına bırakıldı. B3.2 ve B3.3 koşularında
+transient FAIL gözlenmedi.
 
 6.4 SORU X — K′′ diagnostics (KAPANDI)
 Karar: (A) — Strategy + PositionSimulator'a additive
@@ -226,24 +238,19 @@ Sorun: B2e plan kararları PO kısıtı gereği tek final commit istiyordu.
 Durum: KAPANDI — tek commit atıldı (2026-09-22).
 
 6.6 PROTOKOL İHLALİ NOTU (2026-09-22)
-Asistan, dış-ajan prompt mesajında PROTOKOL.md §7.1 ihlali yaptı:
-çıktı bloğu (4-backtick prompt) checklist'ten ÖNCE verildi. §7.1
-"checklist kodun/dökümanın üstünde" der; §7.3 format örneği aynı
-sırayı ima eder. PO ihlali fark etti; asistan kabul etti; çıktı
-doğru sırayla yeniden verildi. Protokol hatası DEĞİL; asistan
-sıralama hatası. Sonraki çıktılarda checklist önce zorunlu;
-denetim sıkılaştırıldı. Kayıt amacıyla not edildi.
-(§10.1 — Mod 1, PO yazdı.)
+Asistan, dış-ajan prompt mesajında PROTOKOL.md §7.1 ihlali yaptı: çıktı
+bloğu (4-backtick prompt) checklist'ten ÖNCE verildi. §7.1 "checklist
+kodun/dökümanın üstünde" der; §7.3 format örneği aynı sırayı ima eder.
+PO ihlali fark etti; asistan kabul etti; çıktı doğru sırayla yeniden
+verildi. Protokol hatası DEĞİL; asistan sıralama hatası. Kayıt amacıyla
+not edildi. (§10.1 — Mod 1, PO yazdı.)
 
-6.7 DURUM.md → PROTOKOL.md geçişi
-Sorun: Eski çalışma seti SOHBET-KAPANIS-PROTOKOLU.md v2.6 (proje-
-spesifik) kullanıyordu. PROTOKOL.md evrensel sürüm yürürlükte
-(v3.2 → v3.3 → v3.4 kümülatif).
-Karar: SOHBET-KAPANIS-PROTOKOLU.md v2.6 ezildi; tüm atıflar
-PROTOKOL.md'ye geçti. Proje dosya seti: DURUM.md + PROTOKOL.md +
+6.7 Proje dosya seti (SSOT)
+Proje dosya seti: DURUM.md + PROTOKOL.md +
 MikoV2-AnaYasa-REV5.md (ANAYASA rolü) + MikoV2-Proje-Tum-
 Moduller-REV5.md (mimari referans, opsiyonel).
-Durum: UYGULANDI (v2.13); PROTOKOL.md v3.4 aktif (v2.14).
+PROTOKOL.md sabittir; devir sırasında güncellenmez.
+Durum: UYGULANDI.
 
 6.8 PROTOKOL İHLALİ NOTU (2026-09-22, B3.1 Mod 2)
 Asistan, B3.1 adım 1 mexc_ws.py tesliminde "Yeni hali" patch bloğunda
@@ -253,9 +260,34 @@ ping_interval_s, dead_timeout_s, _read_task, _ping_task) düştü; 7 test
 FAIL (test_mexc_ws 4, test_ws_ping_timeout 3). Asistan hatayı kabul
 etti; mexc_ws.py tam dosya olarak yeniden teslim edildi. Ders: kısmi
 patch'te `...` yerine gerçek satırlar yazılmalı veya tam dosya
-verilmeli. PO kararı: bundan sonra `...` yasak; ayrıca Eski/Yeni
-hali bloklarında dosya yolu yorumu yazılmaz (kopyala-yapıştır
-akışına uygunluk). (§10.1 — Mod 1, asistan.)
+verilmeli. (§10.1 — Mod 1, asistan.)
+
+6.9 PROTOKOL İHLALİ NOTU (2026-09-23, B3.2 Mod 2)
+Asistan, B3.2 runner integration test tesliminde `test_on_ohlcv_1s_
+feeds_detector_to_recent_signals` içinde `feed_ohlcv_1s` mock'unu
+yanlışlıkla `async def` yazdı; kaynak metod senkron olduğundan
+`TypeError: 'coroutine' object is not iterable` FAIL üretti. Asistan
+hatayı kabul etti; mock senkron `def`'e çevrildi. Ders: mock imzası
+hedef metodun senkron/async niteliğiyle bire bir eşleşmeli. (§10.1 —
+Mod 1, asistan.)
+
+6.10 PROTOKOL İHLALİ NOTU (2026-09-23, B3.2 Mod 2)
+Asistan, test mock düzeltmesi tesliminde "Eski hali" bloğundan önce
+dosya yolunu yazmadı (§7.6.2 ihlali). §6.8'deki eski PO kararını
+§7.6.2 ile çelişkili sanıp §6.8'i üstün tuttu; oysa §7.6.2 zaten
+düzeltilmişti ve sahibi PROTOKOL'dü. Bağlam güncellenmedi. Kayıt
+için not edildi. (§10.1 — Mod 1, asistan.)
+
+6.11 PROTOKOL İHLALİ NOTU (2026-09-23, B3.3 Mod 2)
+Asistan, B3.3 delivery 1 test düzeltmesinde 4 ayrı test
+fonksiyonundan parça parça "eski/yeni" bloğu verdi ve aralara
+başlık yorumları koydu; PO eski halini dosyada bulamadı (§7.6.2
+ihlali — patch bağlamı ve indent karışıklığı). Asistan hatayı
+kabul etti; düzeltme tam dosya olarak yeniden teslim edildi
+(delivery 1 revize). Ders: çoklu küçük patch yerine tek tam
+dosya tercih edilmeli; başlık yorumları eski/yeni bloklarına
+gömülmemeli. Kaynak koda dokunulmadı; yalnız test sınırı
+düzeltildi. (§10.1 — Mod 1, asistan.)
 
 7. BACKTEST İLERLEME
 | İş|Durum|
@@ -274,35 +306,21 @@ akışına uygunluk). (§10.1 — Mod 1, asistan.)
 | B2e.3 — Rapor (G′/N/diagnostics)|Kapandı (24 test)|
 | B2e kapanış — Tek commit|Kapandı (2026-09-22)|
 | B3.1 — Çok-sembol kolektör|Kapandı (2026-09-22)|
+| B3.2 — Micro-trigger canlı + Strategy shadow|Kapandı (2026-09-23)|
+| B3.3 — Paper position manager|Kapandı (2026-09-23)|
 | B2e.real — Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
 
-B2e.1 kapsamı (kapandı): MultiSymbolRunner (interleaved); per-symbol
-Strategy/SignalDetector; tek PositionSimulator; K′′ dropped_entries;
-cooldown_active transition-only.
-
-B2e.1S kapsamı (kapandı): sentetik minimum (SORU 3=B).
-
-B2e.2 kapsamı (kapandı): WalkForwardConfig + FoldWindow + FoldResult
-+ WalkForwardResult + WalkForwardRunner; Trade.window_id/fold_id.
-
-B2e.2S kapsamı (kapandı): step>test, step≤0 default, çok-fold
-determinizm, boundary-gap.
-
-B2e.3 kapsamı (kapandı): multi_report.py (SCHEMA_VERSION=1;
-CLAIM_CAPABLE/SYNTHETIC_VALIDATED/SINGLE_SYMBOL_REAL/
-MULTI_SYMBOL_REAL; build_report; data_quality profilleri;
-dropped_entries_by_reason/by_symbol; excluded_symbols{all, effective,
-version}); CLI --mode single|multi|walkforward + --data-quality-profile;
-collect_ticker_secs + collect_depth_secs.
-
-B3.1 kapsamı (kapandı): mexc_ws.py dinamik subscribe/unsubscribe/
-subscribed_symbols; universe_service.py RotationDecision + hysteresis
-(zaman) + flap (sayı, Q2=B round-trip) + üstel quarantine (SORU A
-1h→4h→24h) + Q3=B 7 gün stabil reset; runner.py çok-sembol state +
-iki timer (30s scan / 5dk WS rotasyon, SORU B=D) + watch REST ticker
-(SORU D=A) + per-symbol watchdog + Top5→Top4 manuel onay uyarısı
-(SORU F=C); seed_subscriptions (Q4=B yalnız süreç başlangıcı);
---symbols + --enable-rotation CLI.
+B3.3 kapsamı (kapandı): ShadowRunner'a PaperPositionManager
+entegrasyonu; on_ws_tick (best bid/ask mid) her depth push'unda;
+on_ohlcv her tamamlanan 1s OHLCV'de (paper içeride 5s kova birleştirir);
+on_ticker funding güncellemesinde; MicroTrigger TRIGGER transition'da
+on_entry (global asyncio.Lock; stale_price_ms=5000; ATR guard);
+on_ohlcv 5s kova kapanışında exit kontrolü (SL önce; entry_bucket_sec
+atlanır); on_startup ile DB'deki OPEN paper pozisyonlar in-memory'ye
+yüklenir; finalize ile END_OF_BACKTEST exit; SQLite paper_positions +
+paper_events (UNIQUE(position_id, event_type, source_seq) idempotency);
+config izlenebilirliği (config_profile_tag, risk_pct,
+max_positions_global/per_symbol, initial_equity, entry_slippage_bps).
 
 CLI örnek kullanımı:
     # Single
@@ -318,7 +336,8 @@ CLI örnek kullanımı:
     python -m tests.manual.backtest_run --db data/mikov2.sqlite \
         --symbol BTC_USDT --data-quality-profile strict \
         --report should_fail.json
-    # Shadow (B3.1 çok-sembol + rotation)
+    # Shadow (B3.1 çok-sembol + rotation + B3.2 micro-trigger +
+    # B3.3 paper manager)
     python -m tests.shadow.runner --symbols BTC_USDT,SOL_USDT \
         --db data/mikov2.sqlite --enable-rotation
 
@@ -367,15 +386,16 @@ TÜM ALT FAZLAR KAPANDI (2026-09-22):
 - B2e.real: Gerçek çok sembol gate (S′) — veri birikimine bağlı.
 
 Commit politikası: PO kısıtı gereği B2e tek final commit. Yeni
-fazlarda (B3.1, B3.2) yine tek commit.
+fazlarda (B3.1, B3.2, B3.3) yine tek commit.
 
 9. SIRADAKİ FAZLAR
-B3.2 (Mod 1 sırada) → B3.3–5 (position manager paper + alert,
-SORU SS=C sırası) → B2e.real (S′ gate, 30 gün veri birikiminden sonra
-otomatik değerlendirme).
-B3.2 sonrası: strateji parametre optimizasyonu — B2e.real
-sonuçlarına göre. Kârlılık negatif kalırsa öncelik strateji adayı
-iterasyonuna kayar (B3 gerçek-para adımı bloklanır).
+B3.4 (Mod 2 sırada) → B3.5 → B2e.real (S′ gate, 30 gün veri
+birikiminden sonra otomatik değerlendirme).
+B3.4 sonrası: alert entegrasyonu tamamlanmadan gerçek para kararı
+verilmez (SORU SS=C). B3.5: 3-4 hafta paper trading sonrası sigorta.
+Strateji parametre optimizasyonu B2e.real sonuçlarına göre; kârlılık
+negatif kalırsa öncelik strateji adayı iterasyonuna kayar (B3
+gerçek-para adımı bloklanır).
 
 10. PROD İÇİN SONRAKİ ADIMLAR (B3)
 SORU SS (C) sırası:
@@ -385,9 +405,12 @@ WS abonelik güncellenir. Hysteresis 5m/flap 3 yumuşatıcı. e2-micro
 CPU/RAM/DB ilk hafta izlenir; aşılırsa Top5→Top4 daralması S′ ≥4
 koşuluyla uyumlu. (KAPANDI 2026-09-22.)
 B3.2 — Micro-trigger canlı (WS tick -> detector -> signal ->
-strategy). (Sırada.)
+strategy). (KAPANDI 2026-09-23.)
 B3.3 — Position manager paper (canlı canlı paper trading).
-B3.4 — Alert entegrasyonu (Telegram/Discord).
+(KAPANDI 2026-09-23.)
+B3.4 — Alert entegrasyonu (Telegram/Discord). MicroTrigger ham
+state event telemetry B3.4'te alert routing ile birleştirilecek
+(§11 B3.3 KARARLARI E=B+ kararı).
 B3.5 — Sigorta: 3-4 hafta paper trading -> gerçek para (alert
 entegrasyonu tamamlanmadan gerçek para kararı verilmez).
 
@@ -396,7 +419,7 @@ Git/checkpoint:
 Güvenilmeyen commit'ler local'de reset, remote'a force-push ile
 silinir. Önceki checkpoint: 7fb827848aee38897fcea9616d4ea898c294089a
 (REV9 DURUM + BAĞLAM, 2026-09-17).
-Bu oturum checkpoint'i: <COMMIT_HASH> (B3.1 kapanış, 2026-09-22).
+Bu oturum checkpoint'i: <COMMIT_HASH> (B3.3 kapanış, 2026-09-23).
 Protokol = yöntem, DURUM = içerik. Devir sırasında sadece bu dosya
 güncellenir; PROTOKOL.md sabit kalır.
 B2d çoklu config: --config-a / --config-b.
@@ -435,25 +458,91 @@ SORU BB′ (C): excluded_symbols{all, effective, version}.
 SORU T davranışı: single_symbol_real_walkforward_executed yalnızca
 mode=walkforward + 1 sembol ile True.
 
-B3.1 ALT PARAMETRE KARARLARI (SORU A–G, 2026-09-22, KİLİTLİ):
-A) Flap quarantine: (C) pencere + üstel geri çekilme (1h→4h→24h);
-   per-symbol sayaç + son_ceza_süresi. Kronik flapper e2-micro WS
-   churn ve SQLite WAL baskısını kalıcı söndürür.
-B) Rotation scan: (D) iki aşamalı — scan 30s (liste tazeliği),
-   WS rotasyonu 5dk (churn sönümleme; hysteresis ile hizalı).
-C) State ayrımı: (A) hysteresis (zaman state) ve flap (sayı state)
-   ayrı. Farklı sorgu desenleri; birleştirme yanlış poz/neg üretir.
-D) Watch veri kaynağı: (A) REST ticker 60s; mevcut tickers_snapshot
-   şemasıyla uyumlu; e2-micro rate-limit ve RAM maliyeti minimum.
-E) Kaynak izleme: (C) structured JSON log + dashboard. Log kalıcı
-   (S′ completeness post-mortem); dashboard anlık müdahale. Dashboard
-   RAM kullanımı izleme planına eklendi.
-F) Top5→Top4 tetikleyici: (C) uyarı otomatik + daralma manuel
-   onaylı. S′ ≥4 kritik; yanlış metrik okuması S′ gate'ini riske
-   atamaz. systemd Restart=always OOM senaryosu için ek koruma.
-G) B2e.real sayacı: (C) paralel — tek-sembol (B2e.real) ve
-   çok-sembol (B3) sayaçları ayrı. BTC_USDT 97h birikimi rotasyon
-   churn'ünden izole; S′ gate B3.1 hatasından korunur.
+B3.2 KARARLARI (SORU B3.2-A/B/C/D/E, 2026-09-22 → C revize 2026-09-23,
+KİLİTLİ — Mod 1 onay + 3 dış-ajan karşılaştırması):
+A) MicroTrigger/Strategy rol dağılımı: (A) MicroTrigger ana canlı
+   karar mercii; TRIGGER state'inde EntrySignal üretilir. Strategy
+   canlı ana akışta yer almaz. UYGULANDI.
+B) Evaluate sıklığı: (A) 5s (mevcut timer_sleep_ms=5000); 5s mum
+   kapanışıyla hizalı. UYGULANDI.
+C) EntrySignal sonrası aksiyon: (A) Sadece structured JSON log +
+   telemetry; DB'ye yazılmaz. REVİZE (2026-09-23): telemetry B3.3'e
+   ertelendi; B3.2 kapsamı sadece structured JSON log. Telemetry
+   B3.3 (position manager paper) ile birlikte değerlendirilecek.
+   B3.3'te E=B+ kararı ile paper trades + paper_events telemetry
+   uygulandı; MicroTrigger ham state event telemetry B3.4'e kaldı.
+D) Hata davranışı: (A) Sembol bazlı devre dışı bırakma (quarantine)
+   + log; global shutdown yok. UYGULANDI (is_quarantined /
+   quarantine / MICRO_TRIGGER_QUARANTINE).
+E) Strategy shadow parite kontrolü: (A) B3.2.3 uygulanır — Strategy
+   her sembol için paralel çalışır, EntrySignal üretir, structured
+   JSON log'a yazılır. Emir/pozisyon üretilmez. MicroTrigger
+   TRIGGER'ları ile aynı log dosyasında karşılaştırma alanı bulunur.
+   UYGULANDI.
+
+3 dış-ajan karşıt görüşü (kayıt için): Strategy canlıdan tamamen
+soyutlanırsa backtest-live parite borcu oluşur. SORU B3.2-E=(A)
+bu borcu B3.3'e taşımadan B3.2 içinde ölçmeyi seçti.
+
+B3.3 KARARLARI (SORU B3.3-A/B/C/D/E/F, 2026-09-23, KİLİTLİ — 5
+dış-ajan karşılaştırması + asistan revize):
+A) Paper position manager mimari konumu: (A) + A.1–A.4. Ayrı dosya
+   src/execution/paper_position_manager.py; backtest PositionSimulator
+   ve gerçek OrderManager dışarıda. A.1 ortak math çekirdeği
+   (src/trading/paper_math.py); A.2 entry kararı global asyncio.Lock;
+   A.3 current_position_qty geri beslemesi (get_open_position_qty);
+   A.4 startup rehydration (on_startup). UYGULANDI.
+B) Entry parite: (A) + B.1–B.3. 2 bps slippage; B.1 yön (LONG yukarı,
+   SHORT aşağı); B.2 sizing entry_fill üzerinden; B.3 stale_price_ms
+   =5000 -> "stale_price" reddi. UYGULANDI.
+C) Exit tetikleme: (A′) 5s OHLCV high/low; entry_bucket_sec atlanır;
+   aynı mumda TP+SL -> SL önce (konservatif). Tick exit B3.3 sonrası
+   tech-debt (kayıt). UYGULANDI.
+D) State persistence: (B) + D.1–D.6. SQLite paper_positions +
+   paper_events; D.1 commit->memory; D.2 sync write (trade-off;
+   to_thread refactor B3.3 sonrası); D.3 UNIQUE(position_id,
+   event_type, source_seq); D.4 config izlenebilirliği
+   (config_profile_tag, risk_pct, max_positions_*); D.5 WAL +
+   busy_timeout=5000; D.6 startup rehydration. UYGULANDI.
+E) B3.2-C telemetry kapsamı: (B+) paper trades (paper_positions) +
+   paper_events (REJECT + lifecycle). MicroTrigger ham state event
+   telemetry B3.4'e. UYGULANDI.
+F) Sizing + limit + funding parite: (C-PROD) ayrı paper config bloğu;
+   default PROD (risk_pct=0.006, max_positions_global=2); CLI ile
+   TEST override (0.008/3). config_profile_tag pozisyon satırında
+   saklanır. UYGULANDI.
+
+B3.3 kapanış kaydı:
+- Teslim 1: src/trading/__init__.py, src/trading/paper_math.py,
+  src/execution/paper_position_manager.py,
+  tests/unit/test_b3_3_paper_manager.py (30 test).
+- Teslim 1 düzeltme: test 5s kova kapanış sınırı (sec_after+1 → +5;
+  kaynak değişmedi). 907 PASS.
+- Teslim 2: tests/shadow/runner.py bağlaması (10 nokta:
+  _setup_db init, _apply_push on_ws_tick, _on_ohlcv_1s on_ohlcv,
+  _insert_ticker_snapshot on_ticker, _micro_trigger_loop A.3
+  geri besleme + TRIGGER → on_entry, run() on_startup + finalize).
+  907 PASS.
+- Teslim 3: tests/shadow/test_b3_3_runner_integration.py (7 test).
+  914 PASS.
+- Commit: tek, B3.3 kapanışında.
+
+B3.3 kayıt notları (kilitli karar değil):
+N1. tests/shadow/runner.py tests/ altında üretim orkestratörü;
+    B3.4 öncesi taşıma kararı ayrı soru.
+N2. B3.2 JSON EntrySignal log'u ile B3.3 DB arasında signal_id yok;
+    log şemasına signal_id eklenmesi ayrı commit adayı.
+N3. Contract size quantization (order_manager.quantize_qty) paper'da
+    uygulanmaz; B3.5 planlamasında ele alınacak.
+N4. paper finalize END_OF_BACKTEST üretir; restart recovery
+    on_startup kullanır (finalize çağrılmaz).
+N5. quarantine altında açık pozisyon exit akışı DEVAM eder; entry
+    kontrolü runner'ın sorumluluğunda.
+
+B3.3 dış-ajan dağılımı (kayıt): A 5/5 (A); B 5/5 (A ruhu); C 3/5 (A)
++ 1 kısmi + 1 hayır (tick); D 5/5 (B); E 4/5 (B) + 1 kısmi (B+);
+F 2/5 (A) + 3 kısmi (PROD). Asistan önerisi: C=A′, E=B+, F=C-PROD
+uygulandı.
 
 B3.1 Q1–Q5 ALT PARAMETRE KARARLARI (2026-09-22, KİLİTLİ —
 dış-ajan sentezi, 3 ajan karşılaştırması):
@@ -533,17 +622,12 @@ B3.1 universe_service rotation: apply_scan sync (I/O yok); state
 in-memory; excluded filtre belt-and-suspenders.
 B3.1 runner: rotation arka planda iki timer; --enable-rotation
 opsiyonel; daralma manuel onay.
+B3.3 paper_math: saf fonksiyonlar; backtest ve paper manager paylaşır.
+B3.3 paper_position_manager: entry global asyncio.Lock; exit sync;
+SQLite WAL + busy_timeout=5000 (shadow collector ile aynı desen).
+B3.3 config default: PROD (0.006/2); CLI override ile TEST (0.008/3).
 
 Kod kuralları: Bkz AnaYasa REV5 §0.
-
-SOHBET-KAPANIS format kuralları: PROTOKOL.md §7.5 (blok format) +
-§7.6 (kod değişikliği şablonu; v3.3/v3.4 ile güncellendi) + §7.7
-(test kapısı) + §7.8 (öz-uyum). Kontrol checklist'i düz metin; kod
-bloklarının ÜSTÜNDE.
-PO ek kararları (B3.1'den itibaren):
-- Patch bloklarında `...` işaretleyicisi YASAK (§6.8).
-- Eski/Yeni hali bloklarında dosya yolu yorumu YAZILMAZ (kopyala-
-  yapıştır akışına uygunluk; §6.8).
 
 PROTOKOL İHLALİ NOTU (2026-09-19): asistan aynı sohbette 4-backtick
 kuralını 3 kez ihlal etti; protokol format kuralı netleştirilerek
@@ -556,22 +640,37 @@ geri çekildi. B2e.1 sonucu etkilenmedi. Kayıt amacıyla not edildi.
 (§10.1 — Mod 1, PO yazdı.)
 
 PROTOKOL İHLALİ NOTU (2026-09-22): asistan dış-ajan prompt mesajında
-PROTOKOL.md §7.1 ihlali yaptı (checklist bloğun altında verildi).
-PO fark etti; çıktı doğru sırayla yeniden verildi. Kayıt için §6.6'da.
+PROTOKOL.md §7.1 ihlali yaptı (checklist bloğun altında verildi). PO
+fark etti; çıktı doğru sırayla yeniden verildi. Kayıt için §6.6'da.
 (§10.1 — Mod 1, PO yazdı.)
 
 PROTOKOL İHLALİ NOTU (2026-09-22, B3.1 Mod 2): `...` işaretleyicisi
 kaynaklı __init__ attribute kaybı. Kayıt için §6.8'de. (§10.1 —
 Mod 1, asistan.)
 
+PROTOKOL İHLALİ NOTU (2026-09-23, B3.2 Mod 2): test mock async/sync
+karışıklığı → TypeError FAIL. Kayıt için §6.9'da. (§10.1 — Mod 1,
+asistan.)
+
+PROTOKOL İHLALİ NOTU (2026-09-23, B3.2 Mod 2): Eski hali bloğundan
+önce dosya yolu yazılmadı (§7.6.2 ihlali). Kayıt için §6.10'da.
+(§10.1 — Mod 1, asistan.)
+
+PROTOKOL İHLALİ NOTU (2026-09-23, B3.3 Mod 2): çoklu parça patch
+eski/yeni bloğu karışıklığı (§7.6.2 ihlali). Kayıt için §6.11'de.
+(§10.1 — Mod 1, asistan.)
+
 12. DOSYA KONUMLARI
 docs/DURUM.md — bu dosya.
-docs/PROTOKOL.md — yöntem dökümanı v3.4 (sabit; evrensel).
+docs/PROTOKOL.md — yöntem dökümanı (sabit; evrensel).
 docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kuralları (ANAYASA rolü).
 docs/MikoV2-Proje-Tum-Moduller-REV5.md — modül pseudo (mimari
 referans).
-Eski docs/SOHBET-KAPANIS-PROTOKOLU.md v2.6 — EZİLDİ; PROTOKOL.md
-kullanılır.
+
+BAYAT ATIF DÜZELTMESİ (2026-09-23): önceki sürümlerde
+src/execution/manager.py referansı vardı; gerçek dosya
+src/execution/order_manager.py. §4 modül tablosu ve bu §12
+güncellendi.
 
 B2e.1 değişen/yeni:
 src/backtest/multi_symbol_runner.py (YENİ) — MultiSymbolRunner.
@@ -619,29 +718,59 @@ per-symbol watchdog; Top5→Top4 daralma uyarı; seed_subscriptions
 tests/unit/test_b3_1_rotation.py (YENİ) — 8 test.
 tests/shadow/test_rotation_integration.py (YENİ) — 7 test.
 
+B3.2 değişen/yeni:
+src/features/micro_trigger.py (DEĞİŞTİ) — SymbolTriggerState.
+quarantine_until_ms; MicroTrigger.is_quarantined() + quarantine(symbol,
+reason); MICRO_TRIGGER_QUARANTINE event; evaluate() başında quarantine
+kontrolü; _reset_to_idle quarantine'i sıfırlamaz (ortogonal).
+tests/shadow/runner.py (DEĞİŞTİ) — MicroTrigger canlı entegrasyonu
+(_micro_trigger_loop 5s); per-symbol SignalDetector + MicroTrigger +
+shadow Strategy; _on_ohlcv_1s detektör + shadow besleme; _init_symbol_
+state (rotasyon tetikler); _emit_micro_event + _log_entry_signal JSON;
+_determine_direction; quarantine skip + exception quarantine.
+tests/shadow/test_b3_2_micro_trigger.py (YENİ) — 13 test.
+tests/shadow/test_b3_2_runner_integration.py (YENİ) — 7 test.
+
+B3.3 değişen/yeni:
+src/trading/__init__.py (YENİ) — package marker.
+src/trading/paper_math.py (YENİ) — saf math çekirdeği.
+src/execution/paper_position_manager.py (YENİ) —
+  PaperPositionManager + PaperPositionConfig + OhlcvSample +
+  PaperTradeResult.
+tests/unit/test_b3_3_paper_manager.py (YENİ) — 30 test.
+tests/shadow/test_b3_3_runner_integration.py (YENİ) — 7 test.
+tests/shadow/runner.py (DEĞİŞTİ) — paper manager bağlaması
+  (10 nokta; bkz §11 B3.3 kapanış kaydı).
+
 13. YENİ SOHBET NASIL BAŞLAR
 Verilecek dosyalar:
-DURUM.md (bu, v2.14)
-PROTOKOL.md (v3.4, evrensel)
+DURUM.md (bu, v2.18)
+PROTOKOL.md (evrensel)
 MikoV2-AnaYasa-REV5.md
 MikoV2-Proje-Tum-Moduller-REV5.md
-İlk mesajda Mod 1 için istenen dosyalar (B3.2 plan için):
-- tests/shadow/runner.py (B3.1 sonrası hali)
-- src/backtest/signal_detector.py
-- src/backtest/strategy.py
-- src/features/micro_trigger.py (varsa)
-- src/backtest/engine.py
+İlk mesajda Mod 2 için istenen dosyalar (B3.4 uygulama için):
+- tests/shadow/runner.py (B3.3 hedefi — mevcut hali)
+- src/features/micro_trigger.py (mevcut hali)
+- src/dashboard/app.py (mevcut hali)
+- src/dashboard/routes.py (mevcut hali)
+- src/dashboard/static/index.html (mevcut hali)
+- src/data_layer/mexc_rest.py (mevcut hali)
+- tests/shadow/test_b3_3_runner_integration.py (B3.3 test kalıbı)
+- tests/shadow/test_b3_2_micro_trigger.py (B3.2 test kalıbı)
 Açılış mesajı:
-"MikoV2 projesine devam ediyoruz. B3.2'den başlıyoruz. Mod: 1
-(Döküman). DURUM.md v2.14'ü okudun mu? B3.1 kapandı (856 PASS +
-1 bilinen transient FAIL). PROTOKOL.md v3.4 yürürlükte. SORU SS=C
-sırası: B3.2 → B3.3 → B3.4 → B3.5. B3.2 kapsamı: Micro-trigger canlı
-(WS tick -> detector -> signal -> strategy). Kısıtlar: commit B3.2
-kapanışında tek; SORU A′–W + LL/MM/NN/OO/PP/QQ/RR/SS/TT/UU/VV/WW/XX/
-YY/ZZ/AA′/BB′/A1/A2/A3/X/Z/3 + B3.1 A–G + B3.1 Q1–Q5 kilitli;
-yeniden sorma; §6.3 async_telemetry transient B3.2 kapsamı dışı;
-§6.8 `...` yasak + Eski/Yeni hali bloklarında dosya yolu yok;
-Python 3.10; §7.6 şablon + §7.7 test kapısı + §7.8 öz-uyum."
+"MikoV2 projesine devam ediyoruz. B3.4'ten başlıyoruz. Mod: 1
+(planlama) → sonra Mod 2 (kod). DURUM.md v2.18'i okudun mu? B3.3
+kapandı (914 PASS; SORU B3.3-A/B/C/D/E/F kilitli; tek commit
+atıldı). PROTOKOL.md v3.3 yürürlükte. SORU SS=C sırası: B3.4 →
+B3.5. B3.4 kapsamı: Alert entegrasyonu (Telegram/Discord). Açık
+not: B3.2-C'de ertelenen MicroTrigger ham state event telemetry
+B3.4 alert routing ile birleştirilecek (§11 B3.3 KARARLARI E=B+
+kararı). Kısıtlar: commit B3.4 kapanışında tek; SORU A′–W +
+B3.1/B3.2/B3.3 tüm kilitli kararlar geçerli; yeniden sorma; §6.3
+async_telemetry transient B3.4 kapsamı dışı; Python 3.10; §7.6
+şablon + §7.7 test kapısı + §7.8 öz-uyum. B3.4 için Mod 1: alert
+kanal(ları), event routing tablosu, rate limit, batch stratejisi,
+dashboard entegrasyonu kararlarını sor."
 
 14. UNFROZEN BEYANI
 FROZEN YOK.
@@ -659,8 +788,7 @@ v2.4 (2026-09-19): B2c öncesi analiz; SWEEP yön fix; CLI override;
 protokol format kuralı.
 v2.5 (2026-09-20): Protokol entegrasyonu (SSOT, teslim modları, bağlam,
 soru formatı, test kapısı, öz-uyum).
-v2.6 (2026-09-20): SSOT temizliği; versiyon atıf yasağı; protokol v3.2
-uyum.
+v2.6 (2026-09-20): SSOT temizliği; versiyon atıf yasağı; protokol uyum.
 v2.7 (2026-09-20): B2c başlangıç kriterleri (SORU A–F) kilitlendi.
 v2.8 (2026-09-20): B2c kapandı; SORU G/H; 733 test PASS; async
 telemetry notu.
@@ -676,20 +804,53 @@ AA′/BB′/A1/A2/A3 kilitli. CLI: --mode + --data-quality-profile.
 multi_report.py (G′ şeması). Kritik fix: backtest_run.py sim.finalize
 imza uyumu. B2e kapanış commit'i atıldı.
 v2.13 (2026-09-22): B3.1 uygulama planı Mod 1'de ONAYLANDI. SORU A–G
-alt parametre kararları kilitlendi. PROTOKOL.md v3.2 yürürlükte;
-SOHBET-KAPANIS-PROTOKOLU.md v2.6 ezildi; tüm atıflar PROTOKOL.md'ye
-geçti. §6.6 yeni PROTOKOL İHLALİ NOTU (2026-09-22, §7.1 ihlali).
-§6.7 DURUM.md → PROTOKOL.md geçişi. Mod 2 için dosya istekleri
-sırada. B2e kapanış commit'i atıldı.
+alt parametre kararları kilitlendi. §6.6 yeni PROTOKOL İHLALİ NOTU
+(2026-09-22, §7.1 ihlali). §6.7 proje dosya seti. Mod 2 için dosya
+istekleri sırada. B2e kapanış commit'i atıldı.
 v2.14 (2026-09-22): B3.1 kapandı (856 PASS + 1 bilinen transient
 FAIL). mexc_ws dinamik sub; universe_service rotation (SORU A–G +
-Q1–Q5 dış-ajan sentezi: Q1=B 1h, Q2=B round-trip, Q3=B 7 gün reset,
-Q4=B restart seed, Q5=A watch state yok); runner çok-sembol; iki
-timer (30s scan / 5dk rotasyon); watch REST ticker; per-symbol
-watchdog; Top5→Top4 manuel onay uyarısı. PROTOKOL.md v3.4 yürürlükte.
-§6.8 yeni PROTOKOL İHLALİ NOTU (`...` işaretleyicisi; PO kararı:
-`...` yasak, Eski/Yeni hali bloklarında dosya yolu yok). Tek commit
-B3.1 kapanış.
+Q1–Q5 dış-ajan sentezi); runner çok-sembol; iki timer (30s scan /
+5dk rotasyon); watch REST ticker; per-symbol watchdog; Top5→Top4
+manuel onay uyarısı. §6.8 yeni PROTOKOL İHLALİ NOTU (`...`
+işaretleyicisi; PO kararı: `...` yasak, Eski/Yeni hali bloklarında
+dosya yolu yok). Tek commit B3.1 kapanış. Not: v2.14 içinde
+PROTOKOL.md → SOHBET-KAPANIS-PROTOKOLU.md referans düzeltmesi (PO
+kararı 2026-09-22); versiyon numarası değiştirilmedi.
+v2.15 (2026-09-22): B3.2 planı Mod 1'de ONAYLANDI. SORU B3.2-A/B/C/D/E
+kilitlendi (§11). A=(A) MicroTrigger ana karar mercii; B=(A) 5s
+evaluate; C=(A) JSON log + telemetry; D=(A) sembol bazlı quarantine;
+E=(A) Strategy shadow parite kontrolü (B3.2.3). Kod BAŞLAMADI.
+v2.16 (2026-09-22): Protokol dökümanı geçişi — SOHBET-KAPANIS-
+PROTOKOLU.md v2.6 → PROTOKOL.md v3.3 (evrensel). Tüm canlı atıflar
+PROTOKOL.md'ye çevrildi; protokol bölüm numarası kaymaları
+yansıtıldı (blok format §7.5, kod değişikliği şablonu §7.6, test
+kapısı §7.7, öz-uyum §7.8). İçerik (faz/karar/test) değişmedi;
+sadece atıf ve konum güncellemesi. Protokol versiyonu v3.3;
+DURUM v2.15 → v2.16 (PO onayına tabi, §11.1).
+v2.17 (2026-09-23): B3.2 kapandı — MicroTrigger canlı entegrasyonu
+(5s evaluate, TRIGGER → EntrySignal JSON log); shadow Strategy
+paralel parite kontrolü; MicroTrigger quarantine API
+(is_quarantined / quarantine / MICRO_TRIGGER_QUARANTINE); per-symbol
+quarantine skip + exception quarantine; _init_symbol_state rotasyon
+tetikler. SORU B3.2-C REVİZE: telemetry B3.3'e ertelendi; B3.2
+kapsamı sadece structured JSON log. 877 PASS (B3.2 +20 test; +1
+transient çözümü). §6.9 + §6.10 yeni PROTOKOL İHLALİ NOTLARI
+(async/sync mock + Eski hali dosya yolu). SSOT temizliği: PROTOKOL'e
+ait tekrar eden satırlar silindi (§0 devir-protokolü; §11 kontrol
+checklisti üstte + `...` yasak + Eski/Yeni blok dosya yolu notu).
+Protokol = yöntem, DURUM = içerik ilkesi uygulandı.
+v2.18 (2026-09-23): B3.3 kapandı — paper position manager canlı
+canlı paper trading; src/trading/paper_math.py ortak math çekirdeği;
+src/execution/paper_position_manager.py + SQLite paper_positions +
+paper_events (UNIQUE idempotency, config izlenebilirliği); runner
+bağlaması (10 nokta; A.3 current_position_qty geri beslemesi dahil).
+SORU B3.3-A/B/C/D/E/F kilitli (5 dış-ajan karşılaştırması: A 5/5,
+B 5/5, C 3/5+1 kısmi+1 hayır → A′ uygulandı, D 5/5, E 4/5+1 kısmi
+→ B+ uygulandı, F 2/5+3 kısmi → C-PROD uygulandı). 914 PASS (B3.3
+toplam 37: 17 paper_math + 13 paper_manager + 7 runner integration).
+§6.11 yeni PROTOKOL İHLALİ NOTU (test 5s kova kapanış sınırı; kaynak
+değişmedi). §12 bayat atıf düzeltmesi: manager.py → order_manager.py.
+Protokol = yöntem, DURUM = içerik ilkesi uygulandı.
 
 16. SORU A′–W PLAN KARARLARI (KİLİTLİ)
 Bu bölüm B2e plan kararlarının SSOT sahibidir. Diğer bölümler bu
