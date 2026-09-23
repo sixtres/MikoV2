@@ -41,6 +41,7 @@ class DashboardRoutes:
         sqlite_lock: asyncio.Lock,
         telemetry_queue: Any | None = None,
         started_mono: float | None = None,
+        alert_agent: Any | None = None,
     ) -> None:
         self._config = config
         self._sqlite = sqlite_writer
@@ -49,6 +50,7 @@ class DashboardRoutes:
         self._started_mono = started_mono or time.monotonic()
         self._event_buffer: list[dict] = []
         self._event_id_counter: int = 0
+        self._alert_agent = alert_agent
 
     # --------------------------------------------------------------- auth
 
@@ -316,3 +318,94 @@ class DashboardRoutes:
                 if len(out) >= limit:
                     break
         return out
+
+    # --------------------------------------------------------------- alerts
+
+    async def alert_history(self, limit: int = 100) -> dict:
+        """B3.4 E=B': alert history pull (SSE YOK)."""
+        if self._alert_agent is None:
+            return {
+                "events": [],
+                "count": 0,
+                "error": "agent_not_configured",
+            }
+        try:
+            conn = self._alert_agent._conn
+            rows = conn.execute(
+                "SELECT id, ts_ms, event_type, severity, symbol,"
+                " delivery_status, correlation_id, attempts, last_error"
+                " FROM alert_events ORDER BY id DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        except Exception as e:
+            logger.warning("alert_history failed: %s", e)
+            return {"events": [], "count": 0, "error": str(e)}
+        events = [
+            {
+                "id": r[0],
+                "ts_ms": r[1],
+                "event_type": r[2],
+                "severity": r[3],
+                "symbol": r[4],
+                "delivery_status": r[5],
+                "correlation_id": r[6],
+                "attempts": r[7],
+                "last_error": r[8],
+            }
+            for r in rows or []
+        ]
+        return {"events": events, "count": len(events)}
+
+    async def alert_status(self) -> dict:
+        """B3.4 E=B': counter + breaker + status panel verisi."""
+        if self._alert_agent is None:
+            return {"enabled": False}
+        agent = self._alert_agent
+        pending = 0
+        try:
+            row = agent._conn.execute(
+                "SELECT COUNT(*) FROM alert_events"
+                " WHERE delivery_status='pending'"
+            ).fetchone()
+            pending = int(row[0]) if row else 0
+        except Exception as e:
+            logger.warning("alert_status pending count failed: %s", e)
+        try:
+            channels = {
+                "telegram": agent.config.telegram_enabled,
+                "discord": agent.config.discord_enabled,
+            }
+            metrics = dict(agent.metrics)
+        except Exception as e:
+            logger.warning("alert_status metrics failed: %s", e)
+            channels = {}
+            metrics = {}
+        return {
+            "enabled": True,
+            "breaker_state": agent.breaker_state,
+            "breaker_consecutive_fails": int(
+                getattr(agent, "_breaker_consecutive_fails", 0)
+            ),
+            "pending": pending,
+            "channels": channels,
+            "metrics": metrics,
+        }
+
+    async def alert_test(self) -> dict:
+        """B3.4 O=(B): test button; rate limit bypass YOK; token zorunlu."""
+        if self._alert_agent is None:
+            return {"ok": False, "error": "agent_not_configured"}
+        try:
+            event_id = await self._alert_agent.emit(
+                "CRITICAL_ALERT",
+                {
+                    "symbol": "TEST",
+                    "reason": "manual_test_button",
+                    "source": "dashboard",
+                    "ts_ms": int(time.time() * 1000),
+                },
+            )
+            return {"ok": True, "event_id": event_id}
+        except Exception as e:
+            logger.warning("alert_test failed: %s", e)
+            return {"ok": False, "error": str(e)}

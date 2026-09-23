@@ -79,6 +79,11 @@ from src.execution.paper_position_manager import (
     PaperPositionConfig,
     PaperPositionManager,
 )
+from src.alerting.agent import (
+    AlertAgent,
+    AlertConfig,
+    config_from_env,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -191,6 +196,11 @@ class ShadowRunner:
         # (conn bağımlı). Bu satır None; _setup_db içinde set edilir.
         self._paper: PaperPositionManager | None = None
 
+        # B3.4: Alert agent; config _setup_db'de valide edilir; agent
+        # run() içinde session açıldıktan sonra init + start edilir.
+        self._alert_agent: AlertAgent | None = None
+        self._alert_config: AlertConfig | None = None
+
         # B3.2: MicroTrigger + Strategy shadow
         self._mt_config = MicroTriggerConfig()
         self._strategy_config = StrategyConfig(
@@ -232,8 +242,12 @@ class ShadowRunner:
         if symbol in self._mt_detectors:
             return
         self._mt_detectors[symbol] = SignalDetector(self._detector_config)
+        # B3.4: symbol'ü closure ile enjekte et; MicroTrigger API değişmez.
         self._micro_triggers[symbol] = MicroTrigger(
-            self._mt_config, self._emit_micro_event
+            self._mt_config,
+            lambda et, pl, s=symbol: self._emit_micro_event(
+                et, {**pl, "symbol": s}
+            ),
         )
         self._recent_signals[symbol] = deque(maxlen=200)
         self._last_mt_state[symbol] = MicroTriggerState.IDLE
@@ -246,13 +260,31 @@ class ShadowRunner:
         self._last_exchange_ts[symbol] = 0
 
     def _emit_micro_event(self, event_type: str, payload: dict) -> None:
-        """Callback for MicroTrigger events (state transitions, deadlines)."""
+        """Callback for MicroTrigger events (state transitions, deadlines).
+
+        B3.4: alert agent aktifse event fire-and-forget olarak iletilir.
+        Running loop yoksa (sync test ortamı) sessizce atlanır.
+        """
         log_entry = {
             "event": event_type,
             "source": "MICRO_TRIGGER",
             **payload,
         }
         logger.info(json.dumps(log_entry))
+        if self._alert_agent is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        payload_with_source = dict(payload)
+        payload_with_source.setdefault("source", "MICRO_TRIGGER")
+        try:
+            loop.create_task(
+                self._alert_agent.emit(event_type, payload_with_source)
+            )
+        except Exception as e:
+            logger.warning("alert emit failed: %s", e)
 
     def _log_entry_signal(
         self,
@@ -888,6 +920,22 @@ class ShadowRunner:
             self._paper._cfg.max_positions_global,
         )
 
+        # B3.4: alert config validasyon (Ş2 fail-fast). Env yoksa
+        # alert agent devre dışı; runner çalışmaya devam eder.
+        try:
+            self._alert_config = config_from_env()
+            logger.warning(
+                "B3_4_ALERT_CONFIG_OK tg=%s dc=%s rate=%ds batch=%d/%ds",
+                self._alert_config.telegram_enabled,
+                self._alert_config.discord_enabled,
+                self._alert_config.rate_limit_s,
+                self._alert_config.batch_size,
+                self._alert_config.batch_window_s,
+            )
+        except ValueError as e:
+            logger.warning("alert config invalid, disabled: %s", e)
+            self._alert_config = None
+
     def _install_sigterm(self) -> None:
         try:
             loop = asyncio.get_event_loop()
@@ -1121,7 +1169,26 @@ class ShadowRunner:
                             except Exception as e:
                                 logger.warning(
                                     "paper on_entry failed symbol=%s: %s",
-                                    symbol, e,
+                                    symbol,
+                                    e,
+                                )
+                        # B3.4: ENTRY event (WARNING batch routing)
+                        if self._alert_agent is not None:
+                            try:
+                                await self._alert_agent.emit(
+                                    "ENTRY",
+                                    {
+                                        "symbol": symbol,
+                                        "direction": direction.value,
+                                        "price": price,
+                                        "ts_ms": now_ms,
+                                        "source": "MICRO_TRIGGER",
+                                        "source_seq": now_ms,
+                                    },
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "alert emit ENTRY failed: %s", e
                                 )
                     self._micro_triggers[symbol]._reset_to_idle(symbol)
                     self._last_mt_state[symbol] = MicroTriggerState.IDLE
@@ -1162,16 +1229,36 @@ class ShadowRunner:
     async def run(self) -> dict:
         timeout = aiohttp.ClientTimeout(total=5.0)
         self._setup_db()
-        # B3.3-D.6: startup rehydration (açık paper pozisyonlar)
-        if self._paper is not None:
-            try:
-                loaded = self._paper.on_startup()
-                logger.warning("B3_3_PAPER_REHYDRATED count=%d", loaded)
-            except Exception as e:
-                logger.warning("paper on_startup failed: %s", e)
 
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
+                # B3.4 P+S: alert agent _setup_db sonrası, paper
+                # on_startup öncesi. Session gerektirir.
+                if self._alert_config is not None:
+                    try:
+                        self._alert_agent = AlertAgent(
+                            self._alert_config, self._conn, session
+                        )
+                        await self._alert_agent.start()
+                        logger.warning("B3_4_ALERT_AGENT_STARTED")
+                    except Exception as e:
+                        logger.warning(
+                            "alert agent start failed: %s", e
+                        )
+                        self._alert_agent = None
+
+                # B3.3-D.6: startup rehydration (açık paper pozisyonlar)
+                if self._paper is not None:
+                    try:
+                        loaded = self._paper.on_startup()
+                        logger.warning(
+                            "B3_3_PAPER_REHYDRATED count=%d", loaded
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "paper on_startup failed: %s", e
+                        )
+
                 self.rest = MEXCRestClient(session)
 
                 # contract_size per symbol
@@ -1310,6 +1397,12 @@ class ShadowRunner:
                     )
                 except Exception as e:
                     logger.warning("paper finalize failed: %s", e)
+            # B3.4: alert agent drain task'ı durdur (pending DB'de kalır).
+            if self._alert_agent is not None:
+                try:
+                    await self._alert_agent.stop()
+                except Exception as e:
+                    logger.warning("alert agent stop failed: %s", e)
             if self._conn is not None:
                 self._conn.close()
 

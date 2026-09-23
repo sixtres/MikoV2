@@ -53,7 +53,7 @@ class DashboardApp:
     async def start(self) -> None:
         if self._started:
             return
-        self._app = web.Application()
+        self._app = web.Application(middlewares=[self._auth_middleware])
         self._setup_routes()
         self._runner = web.AppRunner(self._app, shutdown_timeout=2.0)
         await self._runner.setup()
@@ -100,6 +100,13 @@ class DashboardApp:
         self._app.router.add_get("/api/v2/equity", self._handle_equity)
         self._app.router.add_get("/api/v2/pnl", self._handle_pnl)
         self._app.router.add_get("/api/v2/metrics", self._handle_metrics)
+        self._app.router.add_get("/api/v2/alerts", self._handle_alerts)
+        self._app.router.add_get(
+            "/api/v2/alerts/status", self._handle_alert_status
+        )
+        self._app.router.add_post(
+            "/api/v2/alert_test", self._handle_alert_test
+        )
         self._app.router.add_get("/api/v2/sse", self._handle_sse)
 
         static_path = Path(self._config.static_dir)
@@ -107,6 +114,35 @@ class DashboardApp:
             self._app.router.add_static(
                 "/static/", path=str(static_path), name="static"
             )
+
+    # --------------------------------------------------------------- auth
+
+    def _extract_token(self, request: web.Request) -> str:
+        auth = request.headers.get("Authorization", "")
+        if auth:
+            if auth.lower().startswith("bearer "):
+                return auth[7:].strip()
+            return auth.strip()
+        # U=(D): SSE query param deprecated fallback (EventSource custom
+        # header gönderemez).
+        if request.path == "/api/v2/sse":
+            return request.query.get("token", "")
+        return ""
+
+    @web.middleware
+    async def _auth_middleware(self, request, handler):
+        path = request.path
+        if path == "/" or path.startswith("/static/"):
+            return await handler(request)
+        if path == "/api/v2/sse":
+            # SSE handler kendi içinde validate_token çağırır (query
+            # param fallback dahil).
+            return await handler(request)
+        if not self._routes.validate_token(self._extract_token(request)):
+            return web.json_response(
+                {"error": "unauthorized"}, status=401
+            )
+        return await handler(request)
 
     # --------------------------------------------------------------- handlers
 
@@ -149,6 +185,27 @@ class DashboardApp:
 
     async def _handle_metrics(self, request: web.Request) -> web.Response:
         body = await self._routes.metrics()
+        return web.json_response(body)
+
+    async def _handle_alerts(self, request: web.Request) -> web.Response:
+        try:
+            limit = int(request.query.get("limit", "100"))
+        except ValueError:
+            limit = 100
+        limit = max(1, min(limit, 500))
+        body = await self._routes.alert_history(limit=limit)
+        return web.json_response(body)
+
+    async def _handle_alert_status(
+        self, request: web.Request
+    ) -> web.Response:
+        body = await self._routes.alert_status()
+        return web.json_response(body)
+
+    async def _handle_alert_test(
+        self, request: web.Request
+    ) -> web.Response:
+        body = await self._routes.alert_test()
         return web.json_response(body)
 
     async def _handle_sse(self, request: web.Request) -> web.StreamResponse:

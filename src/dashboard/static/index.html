@@ -250,6 +250,72 @@
     <canvas id="equity-chart"></canvas>
   </div>
 
+  <!-- Panel 5: Alerts (B3.4 E=B') -->
+  <div class="panel" id="panel-alerts" style="grid-column: 1 / -1;">
+    <h2>Alerts (B3.4)</h2>
+    <div class="metrics">
+      <div class="metric">
+        <div class="label">Breaker</div>
+        <div class="value" id="a-breaker">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Pending</div>
+        <div class="value" id="a-pending">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Emitted</div>
+        <div class="value" id="a-emitted">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Delivered</div>
+        <div class="value" id="a-delivered">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Failed</div>
+        <div class="value" id="a-failed">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Dedup Merged</div>
+        <div class="value" id="a-dedup">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Channels</div>
+        <div class="value" id="a-channels">-</div>
+      </div>
+    </div>
+    <div style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="password" id="a-token" placeholder="auth token (optional)"
+             autocomplete="off"
+             style="padding:4px 8px; background:var(--bg); color:var(--text);
+                    border:1px solid var(--border); border-radius:4px; width:240px;">
+      <button id="a-test-btn" type="button"
+              style="padding:4px 10px; background:var(--blue); color:#000;
+                     border:0; border-radius:4px; cursor:pointer; font-weight:600;">
+        Send Test Alert
+      </button>
+      <span id="a-test-result" style="color:var(--dim); font-size:11px;"></span>
+    </div>
+    <h2 style="margin-top:10px">Son Uyarılar</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Time</th>
+            <th>Type</th>
+            <th>Sev</th>
+            <th>Symbol</th>
+            <th>Status</th>
+            <th class="num">Attempts</th>
+          </tr>
+        </thead>
+        <tbody id="a-history-body">
+          <tr><td colspan="7" class="empty">-</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -295,9 +361,19 @@
     return Number(v) >= 0 ? "green" : "red";
   }
 
-  async function fetchJson(path) {
+  function getToken() {
+    try { return localStorage.getItem("mikov2_token") || ""; } catch (e) { return ""; }
+  }
+  function authHeaders() {
+    const t = getToken();
+    return t ? { "Authorization": "Bearer " + t } : {};
+  }
+
+  async function fetchJson(path, opts) {
     try {
-      const r = await fetch(path, { cache: "no-store" });
+      const o = Object.assign({ cache: "no-store" }, opts || {});
+      o.headers = Object.assign({}, o.headers || {}, authHeaders());
+      const r = await fetch(path, o);
       if (!r.ok) throw new Error("HTTP " + r.status);
       return await r.json();
     } catch (e) {
@@ -456,15 +532,97 @@
     }
   }
 
+  function renderAlerts(status, history) {
+    if (!status || !status.enabled) {
+      setText("a-breaker", "disabled");
+      setText("a-pending", "-");
+      setText("a-emitted", "-");
+      setText("a-delivered", "-");
+      setText("a-failed", "-");
+      setText("a-dedup", "-");
+      setText("a-channels", "-");
+    } else {
+      setText("a-breaker", status.breaker_state || "-");
+      setClass("a-breaker",
+        status.breaker_state === "open" ? "red" :
+        status.breaker_state === "half_open" ? "yellow" : "green");
+      setText("a-pending", String(status.pending || 0));
+      const m = status.metrics || {};
+      setText("a-emitted", String(m.emitted || 0));
+      setText("a-delivered", String(m.delivered || 0));
+      setText("a-failed", String(m.failed || 0));
+      setClass("a-failed", (m.failed || 0) > 0 ? "red" : "");
+      setText("a-dedup", String(m.dedup_merged || 0));
+      const ch = status.channels || {};
+      const parts = [];
+      if (ch.telegram) parts.push("TG");
+      if (ch.discord) parts.push("DC");
+      setText("a-channels", parts.length ? parts.join(" + ") : "none");
+    }
+
+    const body = el("a-history-body");
+    if (!body) return;
+    const events = (history && history.events) || [];
+    if (events.length === 0) {
+      body.innerHTML = '<tr><td colspan="7" class="empty">no alerts</td></tr>';
+      return;
+    }
+    body.innerHTML = events.slice(0, 20).map(e => {
+      const t = new Date(e.ts_ms);
+      const tm = String(t.getHours()).padStart(2, "0") + ":" +
+                 String(t.getMinutes()).padStart(2, "0") + ":" +
+                 String(t.getSeconds()).padStart(2, "0");
+      const sevCls = e.severity === "CRITICAL" ? "red"
+                   : e.severity === "WARNING" ? "yellow" : "";
+      return `<tr>
+        <td>${e.id}</td>
+        <td>${tm}</td>
+        <td>${e.event_type || "-"}</td>
+        <td style="color:var(--${sevCls || "text"})">${e.severity || "-"}</td>
+        <td>${e.symbol || "-"}</td>
+        <td>${e.delivery_status || "-"}</td>
+        <td class="num">${e.attempts || 0}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function bindAlertControls() {
+    const tokenInput = el("a-token");
+    if (tokenInput) {
+      tokenInput.value = getToken();
+      tokenInput.addEventListener("change", () => {
+        try {
+          localStorage.setItem("mikov2_token", tokenInput.value || "");
+        } catch (e) {}
+      });
+    }
+    const btn = el("a-test-btn");
+    if (btn) {
+      btn.addEventListener("click", async () => {
+        const res = el("a-test-result");
+        if (res) res.textContent = "sending...";
+        const r = await fetchJson("/api/v2/alert_test", { method: "POST" });
+        if (res) {
+          if (r && r.ok) res.textContent = "ok id=" + r.event_id;
+          else res.textContent = "failed: " + ((r && r.error) || "unknown");
+        }
+        refreshAll();
+      });
+    }
+  }
+
   async function refreshAll() {
-    const [pos, whales, equity, pnl, metrics, health] = await Promise.all([
-      fetchJson("/api/v2/positions?limit=100"),
-      fetchJson("/api/v2/whales?limit=20"),
-      fetchJson("/api/v2/equity"),
-      fetchJson("/api/v2/pnl"),
-      fetchJson("/api/v2/metrics"),
-      fetchJson("/api/v2/health"),
-    ]);
+    const [pos, whales, equity, pnl, metrics, health, aStatus, aHistory] =
+      await Promise.all([
+        fetchJson("/api/v2/positions?limit=100"),
+        fetchJson("/api/v2/whales?limit=20"),
+        fetchJson("/api/v2/equity"),
+        fetchJson("/api/v2/pnl"),
+        fetchJson("/api/v2/metrics"),
+        fetchJson("/api/v2/health"),
+        fetchJson("/api/v2/alerts/status"),
+        fetchJson("/api/v2/alerts?limit=20"),
+      ]);
 
     state.lastData.positions = pos;
     state.lastData.whales = whales;
@@ -477,6 +635,7 @@
     renderPositions(pos);
     renderWhales(whales);
     renderHealth(health, metrics, equity);
+    renderAlerts(aStatus, aHistory);
 
     const now = new Date();
     setText("last-update", "updated " + now.toLocaleTimeString());
@@ -507,6 +666,7 @@
 
   // bootstrap
   window.addEventListener("load", async () => {
+    bindAlertControls();
     await refreshAll();
     connectSSE();
     // polling fallback every 5s
