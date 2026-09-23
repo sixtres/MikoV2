@@ -1,7 +1,5 @@
-EVRENSEL YAZILIM PROJESİ — ORTAK ÇALIŞMA VE KAPANIŞ PROTOKOLÜ
-Versiyon: v3.3 - Evrensel
-Tarih: 2026-09-22
-Dosya Adı: PROTOKOL.md (SSOT - tüm referanslar bu adı kullanır)
+# EVRENSEL YAZILIM PROJESİ — ORTAK ÇALIŞMA VE KAPANIŞ PROTOKOLÜ
+Dosya: PROTOKOL.md (SSOT - tüm referanslar bu adı kullanır)
 Amaç: Tek dosyada hem dokümantasyon hem kod üretimini disiplinle yönetmek
 
 Bu protokol, uzun sohbetlerde bağlam kaybını önlemek, ajan ile çalışırken disiplini sağlamak ve her projede aynı iskeleti kullanabilmek için tasarlandı.
@@ -57,8 +55,6 @@ Atıf formatı: §X.Y (bölüm numarası). Canlı belge atıfları için §7.2 K
 | Bağlam etiketi kuralı | §4.1 |
 | Bağlam eşikleri | §4.2 |
 | Devir uyarısı davranışı | §4.3 |
-| Kaçırma durumu (§4.4) | §4.4 |
-| GELECEK.md rolü | §0.3 |
 | Hızlı başlangıç | §0.6 |
 | Soru formatı | §5.1 |
 | Soru sorma kuralları | §5.2 |
@@ -70,14 +66,13 @@ Atıf formatı: §X.Y (bölüm numarası). Canlı belge atıfları için §7.2 K
 | Güvenlik kontrolü | §7.2 Kontrol 8 |
 | Kontrol sonucu formatı | §7.3 |
 | Üretim kontrol kapsamı | §7.4 |
-| Blok format kuralları | §7.5 |
+| Çıktı tipi kataloğu ve format | §7.5 |
+| Genel biçim kuralları | §7.5.7 |
 | Kod değişikliği şablonu | §7.6 |
 | Test kapısı | §7.7 |
 | Test komutu (SSOT) | §7.7.1 |
 | Öz-uyum listesi | §7.8.1 |
-| Kaçırma kalıbı | §10 |
 | Övgü yasağı | §9 |
-| Versiyonlama sorumluluğu | §11.1 |
 | Protokol bakımı | §11 |
 
 ---
@@ -107,7 +102,7 @@ A6. Her teslimde bağlam etiketi §4.1'e uygun verilir.
 0.6 HIZLI BAŞLANGIÇ - Ajan için
 
 Yeni sohbete başlarken kullanıcı şunu verir:
-- DURUM.md (son versiyon)
+- DURUM.md (son hali)
 - Bu protokol (PROTOKOL.md)
 - ANAYASA.md (varsa)
 - GELECEK.md (varsa)
@@ -118,6 +113,12 @@ SORU 0 — Mod ve Hedef
 Bağlam: Hangi fazdayız? DURUM §X ne diyor?
 Seçenekler: (A) Mod 1 Dokümantasyon (B) Mod 2 Kod
 Öneri: ... + Doğrulama izi
+
+---
+0.7 STORM Protokolü
+Proje kararları birden çok bağımsız ajanla doğrulanacaksa
+STORM-PROTOKOL.md uygulanır. Bu bölüm yalnızca atıftır; içerik
+STORM-PROTOKOL.md'de yaşar (SSOT).
 
 ---
 1. NE ZAMAN KAPANIŞ YAPILIR
@@ -152,7 +153,7 @@ Adım 3: Git checkpoint al
 Adım 4: Yeni sohbet prompt'unu hazırla
 Asistan son mesajda şunu verir:
     Yeni sohbet açılışı için şu dosyaları ver:
-    1. DURUM.md (son versiyon)
+    1. DURUM.md (son hali)
     2. PROTOKOL.md (bu dosya)
     3. ANAYASA.md
     4. GELECEK.md (varsa)
@@ -163,7 +164,7 @@ Adım 5: Son kontrol (§3)
 ---
 3. KAPANIŞ ÖNCESİ CHECKLIST
 
-[ ] Son faz kapandı, versiyonlar güncellendi
+[ ] Son faz kapandı
 [ ] DURUM.md'ye kilitli kararlar eklendi
 [ ] DURUM.md'ye açık konular eklendi
 [ ] GELECEK.md güncellendi
@@ -177,7 +178,7 @@ Adım 5: Son kontrol (§3)
 4.1 Kural
 Her asistan mesajının SONUNA tahmini bağlam yüzdesi eklenir.
 Format: [bağlam: ~%NN]
-Konum: Mesajın EN SONUNDA, eğer 4-backtick blok varsa bloğun DIŞINDA. Blok içine gömülmez.
+Konum: Mesajın EN SONUNDA; herhangi bir blok varsa bloğun DIŞINDA. Blok içine gömülmez.
 
 4.2 Eşikler
 | Bağlam | Davranış |
@@ -191,9 +192,6 @@ Konum: Mesajın EN SONUNDA, eğer 4-backtick blok varsa bloğun DIŞINDA. Blok i
 - DURUM.md güncellenir
 - Yeni sohbet dosya listesi + açılış mesajı verilir
 - Kullanıcı devam etmek isterse uyarı her mesajda tekrar edilir, asistan kısa tutar
-
-4.4 Kaçırma Durumu
-Bu bölüm ihlal edilirse §10 uygulanır.
 
 ---
 5. KARAR-SORMA FORMATI (BAĞLAYICI)
@@ -261,9 +259,6 @@ Not: Mevcut kod resmi dokümanla çelişiyorsa bu bir hata sinyalidir; öneri ve
 Örnek: "Öneri: (B). Doğrulama: DURUM §4.2 + Python docs (LRU davranışı); çelişki yok."
 Genel bilgi örneği: "Öneri: (A). Doğrulama: genel bilgi (VARSAYIM: resmi doküman erişimi yok); kilitli kararla çelişki yok, doğrulama kullanıcı tarafından teyit edilmeli."
 
-5.4.4 Kaçırma Durumu
-Bu bölüm ihlal edilirse §10 uygulanır.
-
 ---
 6. DOSYA İSTEME PROTOKOLÜ (BAĞLAYICI)
 
@@ -316,8 +311,8 @@ Kontrol 3 — Atıf, Bayatlık ve SSOT:
 Bölüm numaraları (§X.Y) doğru mu? Hedef dokümanda var mı?
 Bölüm numaralandırma şeması tutarlı mı (atlanmış veya numarasız bölüm var mı)?
 Ölü referans var mı?
-Canlı belge atıflarında versiyon numarası kullanılmış mı? (YASAK. Tarihsel versiyon bilgisi gerekiyorsa ayrı cümle olarak yazılır; atıfın parçası olmaz.)
-Atıf yapılan bölüm hâlâ geçerli mi? Deprecated bölüme atıf var mı?
+Canlı belge atıflarında sürüm/sayı etiketi kullanılmış mı? (YASAK.)
+Atıf yapılan bölüm hâlâ geçerli mi? Geçersiz bölüme atıf var mı?
 Dosya yolları mevcut mu?
 Terim sözlüğü tutarlı mı (aynı kavram aynı ad)?
 Aynı sabit/sayı başka yerde farklı mı?
@@ -325,8 +320,7 @@ Aynı sabit/sayı başka yerde farklı mı?
 İçindekiler (varsa) güncel mi?
 SSOT ihlali var mı? Aynı bilgi birden çok bölümde mi yazılı? (§0.4) Varsa kopyalar kaldırılır, atıfla değiştirilir.
 
-Kontrol 4 — Versiyon:
-Versiyon numarası güncellenmesi gerekti mi? Güncelleme gerekiyorsa kullanıcı onayına hazır mı (§11.1)?
+Kontrol 4 — Tarih ve Commit:
 Tarih güncel mi?
 Durum satırı doğru mu?
 Git için commit mesajı hazır mı?
@@ -343,7 +337,7 @@ Kural ve maddeler §7.7'de tanımlıdır. Uygulanıp uygulanmadığı bu maddede
 [ ] Kaynak değişikliği kapsamı ile test kapsamı eşleşiyor mu?
     (Yeni/değişen her davranış için test var mı, test incelemesi
     yapıldı mı?)
-	
+
 Kontrol 7 — Mantık/Semantik:
 Kod hangi YAMA/karara hizmet ediyor? (izlenebilirlik)
 En az 1 pozitif + 1 negatif trace gösterildi mi?
@@ -367,23 +361,22 @@ Hata mesajı: Exception/hata mesajları iç detayı (stack trace, dosya yolu, ş
 Loglama: Hassas veri (parola, token) loglanıyor mu?
 
 7.3 Kontrol Sonucu Formatı
-Asistan kodu/dökümanı vermeden önce şu formatta checklist gösterir (düz metin olarak, §7.5):
+Asistan kodu/dökümanı vermeden önce şu formatta checklist gösterir (düz metin olarak):
 
 Format kontrolü:
-[x] §7.5'e uygun (tek 4-backtick, içinde 3-backtick yok)
+[x] §7.5'e uygun (kategori B/C/D ise tek 4-backtick, içinde 3-backtick yok)
 [x] Tüm bloklar 4-space indentation örneği ile verildi; kapsam tarandı
-İçerik kontrolü (önceki versiyondan değişiklikler):
+İçerik kontrolü (önceki halinden değişiklikler):
 [x] Değişiklik 1 işlendi
 [x] Tüm alt maddeler (§7.2 Kontrol 2) tarandı; ihlal yok
 Atıf, bayatlık ve SSOT kontrolü:
 [x] §X.Y atıflar güncel
 [x] Ölü referans yok
-[x] Canlı belge atıflarında versiyon yok
 [x] SSOT ihlali yok
 [x] Tüm alt maddeler (§7.2 Kontrol 3) tarandı; ihlal yok
-Versiyon kontrolü:
-[x] Versiyon kontrolü yapıldı (§11.1)
+Tarih ve commit kontrolü:
 [x] Tarih güncel
+[x] Commit mesajı hazır
 [x] Tüm alt maddeler (§7.2 Kontrol 4) tarandı
 Tutarlılık kontrolü:
 [x] Çelişki yok
@@ -421,14 +414,71 @@ Bu kontrol her yapılandırılmış çıktı için geçerlidir:
 Kısa mesajlar (sohbet, soru-cevap) bu kapsam dışıdır; sadece "döküman/kod" niteliğindeki çıktılar için geçerlidir.
 Yeni dosya iskeletleri ve tam dosya çıktıları da bu kapsamdadır; sadece §7.6 Kod Değişikliği Şablonu bu çıktılara uygulanmaz.
 
-7.5 Blok Format Kuralları
-- 'Tek 4-backtick' ifadesi, her çıktının kendi tek 4-backtick bloğunda verilmesi anlamına gelir; bir mesajda birden çok çıktı varsa her biri kendi bloğunu alır.
+7.5 Çıktı Tipi Kataloğu ve Format (SSOT)
+
+Aşağıdaki katalog, bu protokol kapsamındaki tüm çıktı tiplerini ve her birinin biçimini tanımlar. Bu katalog format konusunda SSOT'tur; başka bölümler biçim kuralı tanımlamaz, buraya atıf yapar.
+
+7.5.1 Kategori A — Sohbet / raporlama
+Biçim: düz metin. Markdown serbest (başlık, liste, tablo, kalın, italik). Blok kullanılmaz.
+Kapsam:
+- A1 Kısa cevap / onay / teyit
+- A2 İlerleme raporu / ara özet
+- A3 STORM round sonuç sentezi (oy dökümü markdown tablosu; azınlık kaydı)
+- A4 Asistan tie-break gerekçesi
+- A5 SORU formatı (§5.1)
+- A6 Dosya isteme listesi (§6)
+- A7 Hata / durum teyidi
+- A8 VARSAYIM etiketi taşıyan cümle
+- A9 Bağlam etiketi (§4.1 — mesajın en sonunda, blok dışında)
+
+7.5.2 Kategori B — Dosyaya yazılacak döküman teslimi
+Biçim: tek 4-backtick blok. İçinde 3-backtick YASAK. YAML/JSON ise bloğun ilk satırına #yaml veya #json işaretleyicisi yazılır. ASCII diyagramda yalnız + - | > v ^ < karakterleri kullanılır.
+Kapsam:
+- B1 DURUM.md delta / taslak
+- B2 DURUM.md tam güncelleme
+- B3 ANAYASA.md yaması
+- B4 PROTOKOL.md yaması
+- B5 STORM-PROTOKOL.md yaması
+- B6 Proje döküman yaması (uygulama checklist'i, rapor şablonu vb.)
+
+7.5.3 Kategori C — Kod teslimi
+Biçim: her dosya kendi 4-backtick bloğunda; içinde 3-backtick YASAK.
+- Yeni dosya: tek blok; dosya yolu bloğun hemen üstünde tek satır (o dilin yorum karakteriyle).
+- Değişen dosya: "Eski hali" ve "Yeni hali" AYRI 4-backtick bloklarında; dosya yolu her iki bloğun üstünde değil, yalnız §7.6.1 "Dosyalar:" başlığından okunur (kopyala-yapıştır akışı).
+- Kısmi patch bloklarında `...` işaretleyicisi YASAK. Ya tüm etkilenen satırlar açık yazılır, ya tam dosya verilir.
+Kapsam:
+- C1 Yeni kaynak dosya (tam)
+- C2 Değişen kaynak dosya (Eski/Yeni ayrı bloklar)
+- C3 Test dosyası (yeni veya tam)
+- C4 Kısmi patch (yukarıdaki kurala tabi)
+- C5 Hedef/Dosyalar/Diff Özeti/Test satırları: A kategorisinde (düz metin), kod bloklarının etrafında. §7.6.1 yapısına uyar.
+
+7.5.4 Kategori D — Dış ajana yapılandırılmış mesaj
+Biçim: tek 4-backtick blok; içinde 3-backtick YASAK. JSON/YAML ise bloğun ilk satırına işaretleyici yazılır.
+Kapsam:
+- D1 STORM prompt
+- D2 Cross-val prompt
+- D3 Diğer yapılandırılmış dış mesaj
+- D4 Yeni sohbet açılış prompt'u (kopyala-yapıştır kolaylığı için)
+
+7.5.5 Kategori E — Kontrol çıktıları
+Biçim: düz metin. Blok kullanılmaz.
+Kapsam:
+- E1 §7.3 sekiz kontrol checklist'i
+- E2 §7.8 öz-uyum listesi
+- E3 §7.7 test kapısı raporu (Test: / Komut: / Sonuç: satırları)
+- E4 §7.4 kapsam dışı kısa mesaj onayı
+
+7.5.6 Kategori F — Karma mesaj
+Bir mesaj birden çok kategori içeriyorsa her çıktı kendi kategorisinin biçiminde verilir; kategoriler karıştırılmaz. Sohbet düz metin (A), teslim blokları 4-backtick (B/C/D), kontrol çıktıları düz metin (E). Bağlam etiketi (§4.1) mesajın en sonunda, blok dışında.
+
+7.5.7 Genel Biçim Kuralları
+- "Tek 4-backtick" ifadesi, çıktının kendi tek 4-backtick bloğunda verilmesi anlamına gelir; bir mesajda birden çok çıktı varsa her biri kendi bloğunu alır.
 - 4-backtick içinde 3-backtick KESİNLİKLE YASAK.
 - Döküman içindeki kod örnekleri 4-space indentation ile verilir; 3-backtick kullanımı yasaktır.
-- Checklist düz metin olarak verilir, kod bloğuna alınmaz.
-- Bağlam etiketi (§4.1) her zaman bloğun DIŞINDA, mesajın en sonunda yazılır.
-- YAML/JSON: 4-backtick bloğunun ilk satırına #yaml veya #json marker yazılır.
-- ASCII diyagram: sadece + - | > v ^ < karakterleri kullanılır.
+- Checklist düz metin olarak verilir; bloğa alınmaz.
+- Bağlam etiketi (§4.1) her zaman blokların DIŞINDA, mesajın en sonunda yazılır.
+- Markdown tablo A kategorisinde serbest; B/C/D bloklarında tablo metin olarak ASCII veya markdown olarak verilebilir, ek kural yoktur.
 - "Full döküman ver" talebi: döküman tek 4-backtick bloğunda, parça parça değil tam olarak verilir.
 
 7.6 Kod Değişikliği Şablonu
@@ -438,58 +488,40 @@ Her kod teslimi şu bölümleri içerir:
 1. Hedef: Hangi YAMA/karar için
 2. Dosyalar: Değişen + yeni dosyalar (kaynak + test)
 3. Diff Özeti: Ne eklendi/silindi
-4. Kod Bloğu (4-backtick dış blokta, içerik doğrudan kod olarak
-   verilir; iç içe blok kullanılmaz; örnekler için §7.6.3'e bak)
-5. Test: Çalıştırılan komut ve sonuç (komut ANAYASA.md'den - §7.7.1).
+4. Kod Bloğu: §7.5.3 biçiminde verilir; iç içe blok kullanılmaz.
+5. Test: Çalıştırılan komut ve sonuç (komut ANAYASA.md'den — §7.7.1).
    Konum: TÜM kod blokları üretildikten SONRA, "Not:" bölümünden
    HEMEN ÖNCE. Kod bloklarının arasına gömülmez; mesajın sonuna
-   yakın tek bir blok halinde verilir. Format:   
-   
+   yakın tek bir blok halinde verilir. Format:
+
        Test:
        Komut: <ANAYASA.test_komutu>
        Sonuç: <N PASS | PENDING USER EXECUTION | FAIL>
-   
+
    Gerekçe: Test sonucu tüm kodun bütünlüğüne dair bir beyandır; kod
    parçalarının arasında verildiğinde kapsam belirsizleşir. Mesaj
    sonunda tek blok halinde verildiğinde hangi teslime ait olduğu
    tartışmasız olur.
-   
+
 7.6.2 Kurallar
 - Minimal değişiklik. Gereksiz refactor yok.
 - Kapsam aşımı yok (scope creep). İstenmeyen dosyaya dokunma.
 - Mevcut koddan bahsediliyorsa sadece kullanıcının verdiği içerikten.
-- Teslim sırasında "Eski hali" ve "Yeni hali" kod parçaları AYRI 4-backtick
-  bloklarında verilir. Eski/Yeni hali bloklarında dosya yolu yorumu
-  YAZILMAZ (kopyala-yapıştır akışına uygunluk; PO kararı 2026-09-22).
-  Hangi dosyaya ait olduğu §7.6.1'deki "Dosyalar:" başlığından okunur.
-- Kısmi patch bloklarında `...` işaretleyicisi YASAK. Kısmi patch'te ya tüm etkilenen
-  satırlar açıkça yazılır, ya tam dosya verilir.
+- Eski/Yeni hali bloklarında dosya yolu yorumu YAZILMAZ (kopyala-yapıştır akışına uygunluk). Hangi dosyaya ait olduğu §7.6.1 "Dosyalar:" başlığından okunur.
+- İndent kuralı zorunludur ve dosyanın kendi yapısına uyar:
+  · Hedef dosyada fonksiyon/metod top-level ise blok sıfır (0) indent ile verilir.
+  · Hedef dosyada fonksiyon/metod class üyesi ise 4-space indent ile verilir.
+  · Yeni dosya tesliminde dosyanın bütünü aynı indent düzeyinde verilir; karışık indent yasak.
+  · Kopyala-yapıştır akışını bozan parça parça indent değişimi (ör. bir bölüm 0, başka bölüm 4) teslim edilmez.
+- Kısmi patch bloklarında `...` işaretleyicisi YASAK. Kısmi patch'te ya tüm etkilenen satırlar açıkça yazılır, ya tam dosya verilir.
 - KAYNAK DEĞİŞİKLİĞİ → TEST KONTROLÜ ZORUNLU:
-  (a) Yeni fonksiyon/metot/sınıf/modül eklendiğinde: aynı teslimde
-      ilgili unit test dosyası da verilir.
-  (b) Mevcut fonksiyon/metot/sınıf değiştirildiğinde (imza, dönüş
-      tipi, sözleşme, yan etki, iç mantık veya sınır davranışı):
-      ilgili test(ler) gözden geçirilir. Davranış değiştiyse test
-      patch'i aynı teslimde verilir; davranış değişmediyse teslim
-      mesajına "Test incelemesi: <test dosyası> — değişiklik
-      gerekmedi, <gerekçe>" satırı eklenir.
-  (c) Test dosyası eksik teslim Mod 2 teslimi sayılmaz; §7.7 test
-      kapısı uygulanmaz; §7.6.1 yapısı eksik kabul edilir
-      (§7.8.1 kontrolü PASS vermez).
-  (d) Test dosyası adı ve yolu §7.6.1 madde 2 "Dosyalar:" listesinde
-      belirtilir.
-  (e) Mevcut test dosyasına ek/patch verilecekse: dosyanın güncel
-      tam hali veya açık diff verilir; `...` ile test atlanamaz
-      (§7.6.2 `...` yasağı ile uyumlu).
-	  
-- Yeni dosya (tam dosya çıktısı) tesliminde de dosya yolu, kod bloğunun
-  hemen üstünde tek satır olarak yazılır (o dilin yorum karakteriyle;
-  örn: # tests/shadow/runner.py). Bu kural, eski/yeni hali bloklarındaki
-  kopyala-yapıştır akışıyla aynı amaca hizmet eder. Dosya ayrıca
-  §7.6.1'deki "Dosyalar:" başlığında da belirtilir.
-- İstisna: Bu protokol dökümanının kendi örnekleri (§7.6.3) tek 4-backtick
-  kısıtı nedeniyle 4-space indentation ile gösterilir; bu istisna yalnızca
-  bu dökümanın kendisine aittir.
+  (a) Yeni fonksiyon/metot/sınıf/modül eklendiğinde: aynı teslimde ilgili unit test dosyası da verilir.
+  (b) Mevcut fonksiyon/metot/sınıf değiştirildiğinde (imza, dönüş tipi, sözleşme, yan etki, iç mantık veya sınır davranışı): ilgili test(ler) gözden geçirilir. Davranış değiştiyse test patch'i aynı teslimde verilir; davranış değişmediyse teslim mesajına "Test incelemesi: <test dosyası> — değişiklik gerekmedi, <gerekçe>" satırı eklenir.
+  (c) Test dosyası eksik teslim Mod 2 teslimi sayılmaz; §7.7 test kapısı uygulanmaz; §7.6.1 yapısı eksik kabul edilir (§7.8.1 kontrolü PASS vermez).
+  (d) Test dosyası adı ve yolu §7.6.1 madde 2 "Dosyalar:" listesinde belirtilir.
+  (e) Mevcut test dosyasına ek/patch verilecekse: dosyanın güncel tam hali veya açık diff verilir; `...` ile test atlanamaz.
+- Yeni dosya (tam dosya çıktısı) tesliminde dosya yolu, kod bloğunun hemen üstünde tek satır olarak yazılır (o dilin yorum karakteriyle; örn: # tests/shadow/runner.py). Dosya ayrıca §7.6.1 "Dosyalar:" başlığında da belirtilir.
+- İstisna: Bu protokol dökümanının kendi örnekleri (§7.6.3) tek 4-backtick kısıtı nedeniyle 4-space indentation ile gösterilir; bu istisna yalnızca bu dökümanın kendisine aittir.
 
 7.6.3 Örnek
 Hedef: YAMA-12 cache LRU
@@ -499,7 +531,7 @@ Test: pytest tests/cache/test_policy.py - 11 PASS
 
 src/cache/policy.py
 Eski hali:
-    
+
     class CachePolicy:
         def __init__(self):
             self.ttl = 3600
@@ -513,11 +545,7 @@ Yeni hali:
         def get(self, key):
             return self._cache.get(key)
 
-Not: Yukarıdaki "Eski hali:" ve "Yeni hali:" başlıklarının altındaki kod
-parçaları, bu dökümanın kendisi tek 4-backtick bloğunda sunulduğu ve
-içinde 3-backtick/4-backtick iç içe kullanımı yasak olduğu için (§7.5),
-ayrı 4-backtick blokları yerine 4-space indentation ile gösterilmiştir.
-Gerçek teslim sırasında §7.6.2'deki ayrı blok kuralı ve "eski halinden önce hedef dosya yolu" kuralı geçerlidir.
+Not: Yukarıdaki "Eski hali:" ve "Yeni hali:" başlıklarının altındaki kod parçaları, bu dökümanın kendisi tek 4-backtick bloğunda sunulduğu ve içinde 3-backtick/4-backtick iç içe kullanımı yasak olduğu için (§7.5.7), ayrı 4-backtick blokları yerine 4-space indentation ile gösterilmiştir. Gerçek teslim sırasında §7.5.3 biçimi geçerlidir.
 
 7.6.4 Kapsam
 Sadece Mod 2'de kullanılır.
@@ -535,12 +563,8 @@ Evrensel format: {ANAYASA.test_komutu} (örneğin pytest, npm test, go test ./..
 - Tüm testler PASS olmalı
 - Flaky taraması yapılır (şüpheli test 2 kez çalıştırılır)
 - Yeni paket eklendiyse versiyon pinlenir (requirements.txt / package.json vb.)
-- PO PASS sayısı beyan ettiğinde asistan, DURUM.md §2'deki önceki PASS
-  sayısıyla karşılaştırır. Fark ±2'ye kadar kabul; ±2'yi aşan farkta
-  asistan beyanı DURUM.md'ye yazmadan önce sorgular (yeni test mi, flaky
-  mı, kayıt hatası mı?). Karşılaştırma yapılmadan PASS sayısı DURUM.md'ye
-  yazılmaz ve kapanış ilerlemez.
-  
+- PO PASS sayısı beyan ettiğinde asistan, DURUM.md §2'deki önceki PASS sayısıyla karşılaştırır. Fark ±2'ye kadar kabul; ±2'yi aşan farkta asistan beyanı DURUM.md'ye yazmadan önce sorgular (yeni test mi, flaky mı, kayıt hatası mı?). Karşılaştırma yapılmadan PASS sayısı DURUM.md'ye yazılmaz ve kapanış ilerlemez.
+
 7.7.3 Test Başarısızsa ve İstisna Yönetimi
 - Teslim YASAK
 - Push YASAK
@@ -552,7 +576,7 @@ Evrensel format: {ANAYASA.test_komutu} (örneğin pytest, npm test, go test ./..
 
 7.8.1 Liste - Her mesaj gönderilmeden önce
 [ ] Format kurallarına uyuldu mu (§7.5)?
-[ ] Atıflar gerçek mi? Canlı belge atıflarında versiyon numarası var mı? (Olmamalı)
+[ ] Atıflar gerçek mi? Canlı belge atıflarında sürüm/sayı etiketi var mı? (Olmamalı)
 [ ] Bölüm numaralandırma tutarlı mı?
 [ ] SSOT ihlali var mı? (§0.4)
 [ ] Teslim modu net mi? (Mod 1 / Mod 2, §0.5)
@@ -563,17 +587,11 @@ Evrensel format: {ANAYASA.test_komutu} (örneğin pytest, npm test, go test ./..
 [ ] (Mod 2 ise) Güvenlik kontrolü §7.2 Kontrol 8'e uygun mu? (Mod 1'de N/A)
 [ ] Girdideki secret çıktıya taşınmadı mı?
 [ ] Cevaplanmayan soru bir sonraki mesaja taşındı mı? (§5.3)
-[ ] Versiyon/tarih kullanıcı onayı olmadan değiştirilmedi mi? (§11.1)
 [ ] Kapsam aşıldı mı?
 [ ] Değişiklik minimal mi?
 [ ] (Mod 2 ise) §7.6.1 5-bölüm yapısı (Hedef / Dosyalar / Diff Özeti / Kod Bloğu / Test) eksiksiz uygulandı mı?
-[ ] (Mod 2 ise) Eski/Yeni bloklar §7.6.2'ye uygun mu -eski halinden önce dosya yolu yazılmış mı —  bloklar ayrı mı?
-[ ] (Mod 2 ise) Teslimdeki her kaynak değişikliği için test kontrolü
-    yapıldı mı? Yeni davranış → yeni test; değişen davranış → test
-    patch'i; değişmeyen davranış → "Test incelemesi:" satırı var mı?
-	
-7.8.2 İhlal Durumu
-Herhangi bir madde işaretlenmiyorsa mesaj gönderilmez; düzeltilir, kontrol tekrarlanır. İhlal §10'a göre kaydedilir.
+[ ] (Mod 2 ise) Eski/Yeni bloklar §7.5.3 ve §7.6.2'ye uygun mu — bloklar ayrı mı, indent kuralına uyuldu mu?
+[ ] (Mod 2 ise) Teslimdeki her kaynak değişikliği için test kontrolü yapıldı mı? Yeni davranış → yeni test; değişen davranış → test patch'i; değişmeyen davranış → "Test incelemesi:" satırı var mı?
 
 ---
 8. ASİSTAN KENDİNE NOTLAR (BAĞLAYICI DEĞİL - Hatırlatma)
@@ -591,12 +609,11 @@ Herhangi bir madde işaretlenmiyorsa mesaj gönderilmez; düzeltilir, kontrol te
 - Üretim kontrolü yap (§7.1)
 - Teslim modunu karıştırma (§0.5)
 - Test edilmemiş kod teslim etme (§7.7)
-- 4-backtick kuralını ihlal etme (§7.5)
+- Çıktı tipini §7.5 kataloğuna göre belirle; karıştırma
 - Protokolü proje bilgisiyle doldurma. Proje-özel her şey DURUM.md'ye gider
-- Checklist düz metin (§7.5)
+- Checklist düz metin (§7.5.5)
 - Bayat atıf bırakma (§7.2 Kontrol 3)
 - Pinleme yap (§7.7.2)
-- Versiyon takibi (§11.1)
 
 ---
 9. ÇALIŞMA PRENSİPLERİ (BAĞLAYICI - Kullanıcı tarafından geçersiz kılınamaz)
@@ -612,48 +629,21 @@ Herhangi bir madde işaretlenmiyorsa mesaj gönderilmez; düzeltilir, kontrol te
 - Bağlam takibi bağlayıcı (§4)
 - Üretim kontrolü bağlayıcı (§7.1)
 - Teslim modları bağlayıcı (§0.5)
+- Çıktı tipi kataloğu bağlayıcı (§7.5)
 - Test kapısı bağlayıcı (§7.7)
 - Öz-uyum bağlayıcı (§7.8)
-- Kaçırma kalıbı bağlayıcı (§10)
 - Protokol bakımı bağlayıcı (§11)
-- Versiyonlama kullanıcı sorumluluğundadır (§11.1)
-
----
-10. KAÇIRMA KALIBI (BAĞLAYICI)
-
-Bu protokoldeki herhangi bir kural ihlal edildiğinde ortak kalıp uygulanır.
-
-10.1 Kalıp
-- Kullanıcı ihlali fark ettiğinde asistan hatayı kabul eder; gerekçe üretmez, savunmaya geçmez
-- Protokol ihlali olarak DURUM.md'ye not düşülür. Not Mod 1 akışıyla üretilir: asistan notu hazırlar, kullanıcı dosyaya yazar (§0.5)
-- İlgili çıktı geri çekilir; kural yeniden uygulanır; çıktı yeniden verilir
-- Sonraki turlarda ilgili kural için denetim sıkılaşır
-
-Örnek PROTOKOL İHLALİ NOTU:
-"Kullanıcı'nın ilettiği '974 pass' beyanını DURUM §2'deki 783 PASS ile karşılaştırmadan doğru kabul etti; fark +191 mantıksız iken §7.2 Kontrol 5 ve §7.8.1 uygulanmadı. Doğru sayı 794 PASS (783 + 11). 974 beyanı proje sahibi tarafından geri çekildi; kayıt amacıyla not edildi."
-
-10.2 Asistanın Kendi Kendine Fark Etmesi
-Asistan §7.8 öz-uyum kontrolünde ihlali kendisi yakalarsa, çıktıyı göndermeden düzeltir ve DURUM.md'ye not düşer (§10.1 Mod 1 akışıyla). Kullanıcıyı ayrıca bilgilendirmek zorunda değildir; ihlal notu DURUM.md'de görünür kalır.
-
-10.3 Tekrarlayan İhlal
-Aynı kural 3 kez ihlal edilirse, o kural için protokol güncellemesi önerilir (kural belirsiz mi, uygulanamaz mı, örneksiz mi?). Güncelleme §11'e tabidir.
 
 ---
 11. PROTOKOL BAKIMI (BAĞLAYICI)
 
-11.1 Yetki
-Versiyonlama ve tarih kullanıcı sorumluluğundadır; asistan kullanıcı onayı olmadan versiyon numarası veya tarihi değiştirmez. Kapsam büyükse yeni versiyon, küçük düzeltme patch.
-
-11.2 Öneri akışı
+11.1 Öneri akışı
 Değişiklik önerisi asistan veya kullanıcı tarafından yapılır. Öneri kullanıcı onayına tabidir; onay olmadan protokol değişmez.
 
-11.3 Tekrarlayan ihlal
-§10.3'teki kural bu bölüme tabidir.
-
-11.4 Değişiklik sonrası kontrol
+11.2 Değişiklik sonrası kontrol
 Değişiklik sonrası §7.8 öz-uyum kontrolü çalıştırılır; SSOT ihlali ve çelişki taranır.
 
-11.5 Kapsam
+11.3 Kapsam
 Protokol güncellemesi Mod 1 kapsamındadır; ajan kodu etkilenmez (§0.5).
 
 ---
@@ -661,7 +651,6 @@ EK: ŞABLONLAR
 
 DURUM.md şablonu (minimal):
     # <Proje> DURUM
-    Versiyon: x.y.z
     Checkpoint: <hash>
     Test: <ANAYASA.test_komutu> - N PASS
     ## Tamamlananlar
