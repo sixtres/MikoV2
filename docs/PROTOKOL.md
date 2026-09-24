@@ -192,6 +192,7 @@ Konum: Mesajın EN SONUNDA; herhangi bir blok varsa bloğun DIŞINDA. Blok için
 - DURUM.md güncellenir
 - Yeni sohbet dosya listesi + açılış mesajı verilir
 - Kullanıcı devam etmek isterse uyarı her mesajda tekrar edilir, asistan kısa tutar
+- Bağlam yüksek olsa da §9'daki prensipler esnetilmez.
 
 ---
 5. KARAR-SORMA FORMATI (BAĞLAYICI)
@@ -633,7 +634,14 @@ Evrensel format: {ANAYASA.test_komutu} (örneğin pytest, npm test, go test ./..
 - Test kapısı bağlayıcı (§7.7)
 - Öz-uyum bağlayıcı (§7.8)
 - Protokol bakımı bağlayıcı (§11)
-
+- Bağlam durumu kuralları esnetmez: bağlam yüzdesi ne olursa olsun
+  (§4.2 eşikleri dahil), §7.5 format, §7.6 kod şablonu, §7.7 test
+  kapısı, §7.8 öz-uyum ve §5.4 öneri doğrulama zorunludur. "Kısa tut"
+  veya "bağlam yüksek" gerekçesiyle format/atıf/checklist atlanamaz.
+  Bağlam yüksekse teslim kapsamı küçültülür (daha az dosya, daha az
+  adım); teslim edilen her çıktı kendi kategorisinin tam biçimine
+  uyar.
+  
 ---
 11. PROTOKOL BAKIMI (BAĞLAYICI)
 
