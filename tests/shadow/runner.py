@@ -79,11 +79,13 @@ from src.execution.paper_position_manager import (
     PaperPositionConfig,
     PaperPositionManager,
 )
+from src.alerting import run_migration as run_alert_migration
 from src.alerting.agent import (
     AlertAgent,
     AlertConfig,
     config_from_env,
 )
+from src.observation import migrate_observation
 
 logging.basicConfig(
     level=logging.INFO,
@@ -906,6 +908,34 @@ class ShadowRunner:
             "ON tickers_snapshot(ts_ms)"
         )
         self._conn.commit()
+
+        # B3.4: alerting migration. Order matters: alerting ve
+        # observation ayni PRAGMA user_version'i paylasir; alerting
+        # `current >= SCHEMA_VERSION` erken-donus kullanir. Observation
+        # once calisirsa taze DB'de uv=1 olur ve alerting skip eder ->
+        # alert_events hic olusmaz. AlertAgent.start() icinde de
+        # cagriliyor; burada cagrilinca orada idempotent no-op olur.
+        try:
+            alert_ver = run_alert_migration(self._conn)
+            logger.warning(
+                "B3_4_ALERT_MIGRATION_OK user_version=%d", alert_ver
+            )
+        except Exception as e:
+            logger.warning("alert migration failed: %s", e)
+            raise
+
+        # B3.5 Mod 2 (T1 wiring): observation_state migration. Idempotent
+        # (CREATE TABLE IF NOT EXISTS + INSERT OR IGNORE + PRAGMA
+        # user_version). Mid-phase schema freeze (B3.5-AI=A) korunur;
+        # yalnizca cagri baglanir.
+        try:
+            obs_ver = migrate_observation(self._conn)
+            logger.warning(
+                "B3_5_OBSERVATION_MIGRATION_OK user_version=%d", obs_ver
+            )
+        except Exception as e:
+            logger.warning("observation migration failed: %s", e)
+            raise
 
         # B3.3: paper manager init (setup_db idempotent; C-PROD default)
         self._paper = PaperPositionManager(

@@ -26,7 +26,7 @@ def _make_app():
 def test_config_defaults():
     cfg = DashboardConfig()
     assert cfg.host == "0.0.0.0"
-    assert cfg.port == 8080
+    assert cfg.port == 10001
     assert cfg.static_cache_max_age == 31536000
 
 

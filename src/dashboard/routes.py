@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -42,6 +43,8 @@ class DashboardRoutes:
         telemetry_queue: Any | None = None,
         started_mono: float | None = None,
         alert_agent: Any | None = None,
+        *,
+        conn: sqlite3.Connection | None = None,
     ) -> None:
         self._config = config
         self._sqlite = sqlite_writer
@@ -51,6 +54,10 @@ class DashboardRoutes:
         self._event_buffer: list[dict] = []
         self._event_id_counter: int = 0
         self._alert_agent = alert_agent
+        # B3.5 M=B: observation_state okuma icin DI (Y-353).
+        # Alert agent env-gated olabilir; observation ondan bagimsiz
+        # calisir (inert mode AC=A / stop-flag H=C).
+        self._conn = conn
 
     # --------------------------------------------------------------- auth
 
@@ -409,3 +416,54 @@ class DashboardRoutes:
         except Exception as e:
             logger.warning("alert_test failed: %s", e)
             return {"ok": False, "error": str(e)}
+
+    # --------------------------------------------------------------- observation
+
+    async def observation(self) -> dict:
+        """B3.5 M=B: observation_state tek-satir okuma (salt-okuma).
+
+        DB baglantisi DI ile gelir (Y-353). Alert agent env-gated
+        olabilir; observation ondan bagimsiz calisir. status alani
+        observation_stop / auto_finalize_done'dan turetilir.
+        """
+        if self._conn is None:
+            return {"error": "no_db_connection"}
+        try:
+            # Lazy import: dashboard modulu observation'a hard-bagimli
+            # olmasin (test mock kolayligi + FAZ 5b wiring beklenir).
+            from ..observation.state import load_state as _load
+            st = _load(self._conn)
+        except Exception as e:
+            logger.warning("observation load failed: %s", e)
+            return {"error": str(e)}
+
+        if st.observation_stop:
+            status = "stopped"
+        elif st.auto_finalize_done:
+            status = "completed"
+        else:
+            status = "active"
+
+        return {
+            "status": status,
+            "observation_stop": st.observation_stop,
+            "observation_started_at_ms": st.observation_started_at_ms,
+            "last_refresh_attempt_ms": st.last_refresh_attempt_ms,
+            "last_refresh_success_ms": st.last_refresh_success_ms,
+            "last_valid_timestamp_ms": st.last_valid_timestamp_ms,
+            "checkpoint_due_ms": st.checkpoint_due_ms,
+            "checkpoint_due_emitted": st.checkpoint_due_emitted,
+            "outage_count": st.outage_count,
+            "outage_total_ms": st.outage_total_ms,
+            "last_outage_start_ms": st.last_outage_start_ms,
+            "last_outage_end_ms": st.last_outage_end_ms,
+            "retention_mode": st.retention_mode,
+            "retention_transition_ms": st.retention_transition_ms,
+            "last_transition_ms": st.last_transition_ms,
+            "last_transition_reason": st.last_transition_reason,
+            "clean_shutdown_marker": st.clean_shutdown_marker,
+            "clean_shutdown_marker_ms": st.clean_shutdown_marker_ms,
+            "target_days": st.target_days,
+            "auto_finalize_done": st.auto_finalize_done,
+            "observation_completed_ms": st.observation_completed_ms,
+        }

@@ -4,7 +4,7 @@ Owner: PO (Eser Göbekli)
 Purpose: Verify project decisions with multiple independent LLMs
          (bias-free, evidence-mandatory, traceable).
 
-Application: PROTOKOL.md §0.7 references this protocol. This file
+Application: PROTOKOL.md §1.7 references this protocol. This file
 is self-contained; it carries content independent of PROTOKOL.md.
 
 ## 0. WHAT / WHY / HOW
@@ -76,4 +76,4 @@ vote in the total weight; it notes this in the minority record.
 ## 6. FILE LOCATIONS
 STORM-PROTOKOL.md — this file (fixed; universal).
 DURUM.md — round results.
-PROTOKOL.md §0.7 — single-line reference.
+PROTOKOL.md §1.7 — single-line reference.

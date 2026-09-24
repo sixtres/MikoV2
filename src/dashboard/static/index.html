@@ -316,6 +316,49 @@
     </div>
   </div>
 
+  <!-- Panel 6: Observation (B3.5 M=B) -->
+  <div class="panel" id="panel-obs" style="grid-column: 1 / -1;">
+    <h2>Observation (B3.5)</h2>
+    <div class="metrics">
+      <div class="metric">
+        <div class="label">Status</div>
+        <div class="value" id="o-status">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Target Days</div>
+        <div class="value" id="o-target">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Elapsed</div>
+        <div class="value" id="o-elapsed">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Retention</div>
+        <div class="value" id="o-retention">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Outages</div>
+        <div class="value" id="o-outages">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Outage Total</div>
+        <div class="value" id="o-outage-ms">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Checkpoint</div>
+        <div class="value" id="o-checkpoint">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Clean Shutdown</div>
+        <div class="value" id="o-clean">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Finalized</div>
+        <div class="value" id="o-finalized">-</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -586,6 +629,46 @@
     }).join("");
   }
 
+  function fmtDuration(ms) {
+    if (!ms || ms <= 0 || isNaN(ms)) return "-";
+    const s = Math.floor(Number(ms) / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h + "h " + m + "m";
+  }
+
+  function renderObservation(obs) {
+    if (!obs || obs.error) {
+      setText("o-status", "error");
+      setClass("o-status", "red");
+      setText("o-target", "-");
+      setText("o-elapsed", "-");
+      setText("o-retention", "-");
+      setText("o-outages", "-");
+      setText("o-outage-ms", "-");
+      setText("o-checkpoint", "-");
+      setText("o-clean", "-");
+      setText("o-finalized", "-");
+      return;
+    }
+    const st = obs.status || "unknown";
+    setText("o-status", st);
+    setClass("o-status",
+      st === "active" ? "green" :
+      st === "completed" ? "blue" : "yellow");
+    setText("o-target", String(obs.target_days || 0));
+    const started = obs.observation_started_at_ms || 0;
+    const elapsed = started > 0 ? Date.now() - started : 0;
+    setText("o-elapsed", fmtDuration(elapsed));
+    setText("o-retention", obs.retention_mode || "-");
+    setText("o-outages", String(obs.outage_count || 0));
+    setText("o-outage-ms", fmtDuration(obs.outage_total_ms || 0));
+    setText("o-checkpoint",
+      obs.checkpoint_due_emitted ? "emitted" : "pending");
+    setText("o-clean", obs.clean_shutdown_marker || "-");
+    setText("o-finalized", obs.auto_finalize_done ? "yes" : "no");
+  }
+
   function bindAlertControls() {
     const tokenInput = el("a-token");
     if (tokenInput) {
@@ -612,7 +695,7 @@
   }
 
   async function refreshAll() {
-    const [pos, whales, equity, pnl, metrics, health, aStatus, aHistory] =
+    const [pos, whales, equity, pnl, metrics, health, aStatus, aHistory, obs] =
       await Promise.all([
         fetchJson("/api/v2/positions?limit=100"),
         fetchJson("/api/v2/whales?limit=20"),
@@ -622,6 +705,7 @@
         fetchJson("/api/v2/health"),
         fetchJson("/api/v2/alerts/status"),
         fetchJson("/api/v2/alerts?limit=20"),
+        fetchJson("/api/v2/observation"),
       ]);
 
     state.lastData.positions = pos;
@@ -636,6 +720,7 @@
     renderWhales(whales);
     renderHealth(health, metrics, equity);
     renderAlerts(aStatus, aHistory);
+    renderObservation(obs);
 
     const now = new Date();
     setText("last-update", "updated " + now.toLocaleTimeString());

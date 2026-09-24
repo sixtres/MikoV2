@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class DashboardConfig:
     host: str = "0.0.0.0"
-    port: int = 8080
+    # B3.5 M=B: single source of truth. Caller must not override.
+    port: int = 10001
     static_cache_max_age: int = 31536000
     inline_css: bool = True
     static_dir: str = "src/dashboard/static"
@@ -106,6 +107,9 @@ class DashboardApp:
         )
         self._app.router.add_post(
             "/api/v2/alert_test", self._handle_alert_test
+        )
+        self._app.router.add_get(
+            "/api/v2/observation", self._handle_observation
         )
         self._app.router.add_get("/api/v2/sse", self._handle_sse)
 
@@ -206,6 +210,12 @@ class DashboardApp:
         self, request: web.Request
     ) -> web.Response:
         body = await self._routes.alert_test()
+        return web.json_response(body)
+
+    async def _handle_observation(
+        self, request: web.Request
+    ) -> web.Response:
+        body = await self._routes.observation()
         return web.json_response(body)
 
     async def _handle_sse(self, request: web.Request) -> web.StreamResponse:

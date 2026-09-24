@@ -5,10 +5,13 @@ Durum: B3.5 Round 5 kapandı. B3.5-AI=A kilit (observation_state
        go/no-go; hard FAIL = NO-GO; soft WARN = PO onayı).
        B3.5 Mod 2 T1..T6 kapandı (migration + state + schema
        freeze absorb + rehearsal). T7 iptal (PO kararı;
-       checklist içeriği T6 JSON + §11'de).
-Sıradaki: B3.5 Mod 2 alt turları (rotasyon aktivasyonu + gözlem
-       metrikleri + inert mode + stop-flag + AD/AE/U). Tek commit
-       B3.5 kapanışında.
+       checklist içeriği T6 JSON + §11'de). B3.5 Mod 2 migration
+       wiring kapandı (T1 → runner._setup_db; alerting önce,
+       observation sonra). Gözlem metrikleri (M=B) kapandı
+       (dashboard 6. panel + /api/v2/observation endpoint).
+       Dashboard port tek kaynaktan 10001.
+Sıradaki: B3.5 Mod 2 kalan (rotasyon aktivasyonu + inert mode +
+       stop-flag + AD/AE/U). Tek commit B3.5 kapanışında.
 Amaç: Yeni sohbete başlarken bağlamı hızlıca aktarmak.
 PO: Eser Göbekli
 Önceki: REV7 (FAZ 6/7/8 kapanış) → REV9 (dashboard + universe +
@@ -23,7 +26,10 @@ geçişi (PROTOKOL.md yürürlükte) → B3.2 kapandı → B3.3 kapandı →
 B3.4 Mod 1 kapandı → B3.4 Mod 2 kapandı → B3.5 Mod 1 plan
 snapshot'ı 4 tur STORM ile kapandı (23 karar A–AH) → B3.5 Round 5
 kapandı (AI=A, AJ=B) → B3.5 Mod 2 T1..T6 kapandı (migration +
-state + schema freeze + rehearsal; 35 yeni test) → T7 iptal.
+state + schema freeze + rehearsal; 35 yeni test) → T7 iptal →
+migration wiring + gözlem metrikleri (M=B) kapandı → PROTOKOL.md
+segment refactor (Mod kaldırıldı; segment türleri A/B/C/D/E;
+renumber §0→§1).
 
 0. ÇALIŞMA YÖNTEMİ
 MikoV2 — MEXC Futures (vadeli) kripto trading botu. Kağıt-öncelikli
@@ -50,7 +56,7 @@ wide fixed-schema).
 Kod kuralları: Bkz AnaYasa REV5 §0.
 
 STORM Protokolü: Çoklu bağımsız LLM ile karar doğrulama
-uygulanıyorsa STORM-PROTOKOL.md yürürlüktedir. PROTOKOL.md §0.7
+uygulanıyorsa STORM-PROTOKOL.md yürürlüktedir. PROTOKOL.md §1.7
 bu dosyaya atıf yapar; SSOT STORM-PROTOKOL.md'dedir.
 
 VM'DEN LOCAL'E DOSYA TRANSFERİ (BAĞLAYICI)
@@ -98,18 +104,24 @@ Not: transfer.sh, 0x0.st kapalı/kısıtlı (2026-09-19 itibariyle).
 | B3.5 Mod 2 T5|schema freeze absorb (9 karar; 15 test)|Kapandı (2026-09-24)|
 | B3.5 Mod 2 T6|rehearsal_b3_5.py (JSON-only; 7 adım hard/soft)|Kapandı (2026-09-24)|
 | B3.5 Mod 2 T7|B3.5_REHEARSAL_CHECKLIST.md|İPTAL (PO kararı 2026-09-24)|
-| B3.5 Mod 2 (kalan)|rotasyon + metrik + inert mode + stop-flag + AD/AE/U|Sıradaki|
+| B3.5 Mod 2 migration wiring|T1 → runner._setup_db (alerting→observation sırası); +3 test|Kapandı (2026-09-25, lokal)|
+| B3.5 Mod 2 gözlem metrikleri (M=B)|dashboard 6. panel + /api/v2/observation; port 10001; +5 test|Kapandı (2026-09-25, lokal)|
+| PROTOKOL.md segment refactor|Mod kaldırıldı; segment türleri A/B/C/D/E; §0→§1 renumber|Kapandı (2026-09-25)|
+| B3.5 Mod 2 (kalan)|rotasyon + inert mode + stop-flag + AD/AE/U|Sıradaki|
 | B2e.real|Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
 
 2. TEST DURUMU
-Toplam: 1036 PASS.
+Toplam: 1039 PASS (T1..T6 sonrası + migration wiring +3 test).
+M=B turu sonrası +5 yeni test (test_b3_5_observation_endpoint.py);
+tam suite henüz koşulmadı; dashboard grubu subset 26 PASS.
 Alt faz dağılımı: B2d 17; B2e.−1 15; B2e.0 18; B2e.1 11; B2e.1S 8;
 B2e.2 11; B2e.2S 4; B2e.3 24; B3.1 15 (8 unit + 7 integration);
 B3.2 20 (13 micro_trigger + 7 runner integration); B3.3 37
 (17 paper_math + 13 paper_manager + 7 runner integration);
 B3.4 Mod 2 87 (12 migration + 29 event_catalog + 18 formatter
-+ 21 agent + 7 runner integration); B3.5 Mod 2 35 (9 migration
-+ 11 state + 15 schema_freeze).
++ 21 agent + 7 runner integration); B3.5 Mod 2 38 (9 migration
++ 11 state + 15 schema_freeze + 3 runner observation wiring);
+B3.5 Mod 2 M=B 5 (observation endpoint; tam suite pending).
 Komut: pytest tests/ -q --tb=short --maxfail=1
 Bilinen transient FAIL (tests/chaos/test_queue_full.py:168) B3.3
 ve B3.4 koşularında gözlenmedi. §6.3'te belgelenen mp.Queue feeder
@@ -126,7 +138,10 @@ sınırı (sec_after+1 → +5), B3.4 `_half_open_test` SQL'i
 `alert_events.reason` kolonunu sorguladı (T1 şemasında yok;
 payload JSON'dan parse ile düzeltildi), B3.5 Mod 2 T2
 `test_no_or_replace_in_module_source` docstring/yorum kaynaklı
-kırılganlık (ast walk'a çevrildi), T5 kolon sayımı (20→21).
+kırılganlık (ast walk'a çevrildi), T5 kolon sayımı (20→21),
+B3.5 Mod 2 migration wiring shared PRAGMA user_version sırası
+(alerting erken-dönüş observation'ı bloke edecekti; alerting
+önce çağrılarak çözüldü).
 
 3. RUNTIME — VM'DE AKTİF OLAN
 Shadow collector (systemctl status miko-collector):
@@ -147,19 +162,28 @@ PRAGMA user_version) → AlertAgent init+start (session sonrası)
 → paper on_startup (rehydration) → run loop. Migration alert_events
 + micro_trigger_events tabloları aynı DB'ye yazılır.
 B3.5 Mod 2 (lokal): observation_state migration + state.py +
-schema freeze testleri + rehearsal script'i. VM'de migration
-henüz çalıştırılmadı; sistem deploy rotasyon aktivasyonu ile
-birlikte yapılacak (sonraki turlar).
+schema freeze testleri + rehearsal script'i + migration wiring
+(_setup_db içinde alerting → observation sırası) + gözlem
+metrikleri (dashboard 6. panel + /api/v2/observation). VM'de
+henüz çalıştırılmadı; git push + VM pull + systemd
+--enable-rotation aktivasyonu ile birlikte yapılacak.
 Veritabanı: Bkz §0 (WAL mode).
-Dashboard: http://<VM_IP>:8090/ (aiohttp.web, 10 endpoint, Chart.js)
-B3.4 E=B' panel: alert counter + history pull + test button +
-status panel (SSE YOK). U=(D): tüm /api/* Authorization header
-zorunlu; SSE query param deprecated fallback (EventSource custom
-header gönderemez). Endpoint'ler: /api/v2/alerts,
+Dashboard: http://<VM_IP>:10001/ (aiohttp.web, 11 endpoint, Chart.js)
+Not: port tek kaynaktan gelir (DashboardConfig.port = 10001);
+çağıran taraf override etmez.
+B3.4 E=B' panel: alert counter + history pull + test button + status
+panel (SSE YOK). U=(D): tüm /api/* Authorization header zorunlu;
+SSE query param deprecated fallback (EventSource custom header
+gönderemez). Endpoint'ler: /api/v2/alerts,
 /api/v2/alerts/status, /api/v2/alert_test (POST).
-Not: Kolektör şu an tek sembol (BTC_USDT). Çok-sembol genişleme B3.1
-Mod 2'de kod olarak hazır; VM'de aktivasyon `--enable-rotation`
-flag'ine bağlı; B3.5 Mod 2'de aktif edilecek (PO onayı ile).
+B3.5 M=B: 6. panel "Observation"; /api/v2/observation endpoint
+(salt-okuma; observation_state tek satır). status alanı
+observation_stop/auto_finalize_done'dan türetilir
+(active|stopped|completed).
+Not: Kolektör şu an tek sembol (BTC_USDT). Çok-sembol genişleme
+B3.1 Mod 2'de kod olarak hazır; VM'de aktivasyon
+`--enable-rotation` flag'ine bağlı; B3.5 Mod 2'de aktif edilecek
+(PO onayı ile).
 
 DB MEVCUT DURUM (2026-09-21):
 - trades_ohlcv_1s: BTC_USDT tek sembol, 332216 satır, span 347517 sn
@@ -181,8 +205,8 @@ DB MEVCUT DURUM (2026-09-21):
 | src/data_layer/constants.py|EXCLUDED_SYMBOLS + EXCLUDED_SYMBOLS_VERSION (§6.2 kanonik liste)|
 | src/storage/mark_price_cache.py|WS -> REST mark price cache|
 | src/storage/equity_tracker.py|60s + close-triggered equity snap|
-| src/dashboard/app.py + routes.py|aiohttp.web server; B3.4: auth middleware (/api/* Authorization zorunlu) + 3 alert endpoint (alerts/status/alert_test)|
-| src/dashboard/static/index.html|4 panel + Chart.js + SSE; B3.4: 5. panel (Alerts — counter/history/test button/status); token localStorage|
+| src/dashboard/app.py + routes.py|aiohttp.web server; B3.4: auth middleware (/api/* Authorization zorunlu) + 3 alert endpoint; B3.5 M=B: /api/v2/observation endpoint + DashboardConfig.port tek kaynak (10001)|
+| src/dashboard/static/index.html|5 panel + Chart.js + SSE; B3.4: 5. panel (Alerts); B3.5 M=B: 6. panel (Observation); token localStorage|
 | src/backtest/replay_transport.py|SQLite 3-tablo merge -> stream; stream_multi; collect_ohlcv_secs / collect_ticker_secs / collect_depth_secs (B2e.3 coverage)|
 | src/backtest/engine.py|Event dispatch engine|
 | src/backtest/signal_detector.py|SWEEP/MSS/FVG/OTE tespiti (5s)|
@@ -192,7 +216,7 @@ DB MEVCUT DURUM (2026-09-21):
 | src/backtest/multi_report.py|B2e.3 — G′ rapor şeması; SCHEMA_VERSION=1; CLAIM_* enum; build_report saf fonksiyon; data_quality{profile, by_symbol, aggregate}; dropped_entries_by_reason/by_symbol (SORU A3); excluded_symbols{all, effective, version} (SORU BB′)| 
 | src/backtest/reporting.py|B2d — genişletilmiş rapor (Sharpe, PF, expectancy, equity curve)|
 | src/backtest/data_quality.py|B2e.0 — gap/completeness detection; B2e.3 — ticker/depth coverage da (SORU XX)|
-| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation. B3.2: MicroTrigger canlı (5s evaluate) + shadow Strategy paralel + TRIGGER → EntrySignal JSON log + per-symbol quarantine skip + _init_symbol_state. B3.3: PaperPositionManager bağlaması (on_ws_tick, on_ohlcv, on_ticker, TRIGGER → on_entry, A.3 current_position_qty geri besleme, on_startup rehydration, finalize). B3.4: AlertAgent bağlaması (P+S startup sırası); _emit_micro_event fire-and-forget yönlendirme; MicroTrigger callback closure ile symbol enjeksiyonu; TRIGGER → ENTRY event emit; finally'de agent.stop()|
+| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation. B3.2: MicroTrigger canlı (5s evaluate) + shadow Strategy paralel + TRIGGER → EntrySignal JSON log + per-symbol quarantine skip + _init_symbol_state. B3.3: PaperPositionManager bağlaması. B3.4: AlertAgent bağlaması. B3.5 Mod 2: _setup_db içinde alerting → observation migration sırası (shared PRAGMA user_version)|
 | src/features/micro_trigger.py|Per-symbol MicroTrigger state machine (IDLE->SWEEP->MSS->FVG_OTE->MICRO_CONFIRM->TRIGGER); paused_ms, hard deadline 600s, quarantine, next_candle, per-symbol asyncio.Lock. B3.2: quarantine_until_ms + is_quarantined() + quarantine(symbol, reason) + MICRO_TRIGGER_QUARANTINE event|
 | src/trading/paper_math.py|B3.3 — ortak math çekirdeği (saf fonksiyonlar); backtest ve paper manager paylaşır|
 | src/execution/paper_position_manager.py|B3.3 — PaperPositionManager (canlı paper trading). on_entry (global asyncio.Lock + stale_price + ATR guard); on_ohlcv (5s kova exit; SL önce; entry_bucket_sec atlanır); on_ws_tick; on_ticker (funding); on_startup (DB rehydration); finalize (END_OF_BACKTEST); SQLite paper_positions + paper_events (UNIQUE idempotency); get_open_position_qty (A.3)|
@@ -258,7 +282,7 @@ Etki alanı: Sadece threaded_bridge=True (production default). Testler
 threaded_bridge=False kullandığı için bu yol test kapsamı dışı.
 Karar: FAZ sonrası — B3.4 kapsamı dışı, ayrı commit.
 Doğrulama: KOD İNCELEME (2026-09-20).
-Durum: Not edildi, FAZ sonrasına bırakıldı. B3.2/B3.3/B3.4
+Durum: Not edildi, FAZ sonrasına bırakıldı. B3.2/B3.3/B3.4/B3.5
 koşularında transient FAIL gözlenmedi.
 
 6.4 SORU X — K′′ diagnostics (KAPANDI)
@@ -303,7 +327,9 @@ Durum: UYGULANDI.
 | B3.5 Round 5 — Schema freeze (AI=A) + rehearsal (AJ=B)|Kapandı (2026-09-23)|
 | B3.5 Mod 2 T1..T6 — observation_state migration + state + schema freeze + rehearsal|Kapandı (2026-09-24)|
 | B3.5 Mod 2 T7 — Rehearsal checklist|İPTAL (PO kararı 2026-09-24)|
-| B3.5 Mod 2 kalan — rotasyon + metrik + inert mode + stop-flag + AD/AE/U|Sıradaki|
+| B3.5 Mod 2 migration wiring — T1 → runner._setup_db|Kapandı (2026-09-25, lokal)|
+| B3.5 Mod 2 gözlem metrikleri (M=B) — panel + endpoint|Kapandı (2026-09-25, lokal)|
+| B3.5 Mod 2 kalan — rotasyon + inert mode + stop-flag + AD/AE/U|Sıradaki|
 | B2e.real — Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
 
 B3.3 kapsamı (kapandı): ShadowRunner'a PaperPositionManager
@@ -365,6 +391,61 @@ B3.5 Mod 2 T1..T6 kapsamı (kapandı 2026-09-24):
   2026-09-24). Gerekçe: checklist içeriği T6 JSON (durum_evidence)
   + §11'de yaşar; ayrı doküman SSOT'u böler. PO sign-off formalite
   katmanı gereksiz (tek PO = Eser Göbekli).
+
+B3.5 Mod 2 migration wiring kapsamı (kapandı 2026-09-25, lokal):
+- tests/shadow/runner.py: import bloğuna `run_alert_migration`
+  (src.alerting) + `migrate_observation` (src.observation) eklendi;
+  `_setup_db` içinde alerting migration → observation migration
+  sırası (paper manager init'ten önce).
+- Kritik: alerting ve observation aynı PRAGMA user_version alanını
+  paylaşır. Alerting `current >= SCHEMA_VERSION` erken-dönüş
+  kullanır. Observation önce çalışsaydı taze DB'de uv=1 olur ve
+  alerting skip ederdi → alert_events hiç oluşmazdı. Sıra kilitli.
+- Test: tests/shadow/test_b3_5_runner_observation_wiring.py (3 PASS):
+  tablo varlığı, user_version=1, observation_state tek satır,
+  idempotent ikinci çağrı.
+
+B3.5 Mod 2 gözlem metrikleri (M=B) kapsamı (kapandı 2026-09-25, lokal):
+- src/dashboard/routes.py: `sqlite3` import; `DashboardRoutes.__init__`
+  keyword-only `conn: sqlite3.Connection | None = None` (Y-353 DI);
+  `observation()` metodu — `src.observation.state.load_state` üzerinden
+  salt-okuma; status türetilir (active|stopped|completed).
+- src/dashboard/app.py: `DashboardConfig.port` 8080 → 10001 (tek
+  kaynak); `/api/v2/observation` route + `_handle_observation`.
+- src/dashboard/static/index.html: 6. panel "Observation"; `fmtDuration`
+  + `renderObservation`; `refreshAll()` güncellendi.
+- Port tek kaynak: `DashboardConfig.port = 10001`; çağıran taraf
+  override etmez. (Mevcut VM'deki systemd `--port 8090` satırı B3.5
+  kapanışında güncellenecek.)
+- Test: tests/unit/test_b3_5_observation_endpoint.py (5 PASS);
+  tests/unit/test_dashboard_app.py port assertion 8080 → 10001.
+  Dashboard grubu subset 26 PASS. Tam suite pending.
+
+PROTOKOL.md segment refactor kapsamı (kapandı 2026-09-25):
+- "Mod 1 / Mod 2" kavramı kaldırıldı. Yerine "segment" modeli:
+  mesaj = sıralı segment listesi; her segmentin bir türü vardır.
+- Segment türleri: A (Chat), B (Doküman), C (Kod), D (Dış ajan
+  prompt'u), E (Kontrol çıktısı). §7.5.6 eski "Category F — Mixed
+  message" silindi.
+- §1.5.6 Content Fidelity eklendi: FABRICATION / TRIMMING /
+  COMPRESSION üç yasak (her segment, her dil için).
+- §1.4.2 SSOT istisnaları: segment kural listeleri duplicate
+  edilebilir; §1.5 / §7.5 segment tablosu ikili (subset kural).
+- §1.5.1 S1-S6 segment kuralları; §7.3 BLOCK B + BLOCK C checklist;
+  §7.6.1 teslim içi sıra (src → tests → pytest satırı);
+  §7.6.2 bir dosya = bir başlık + 1-2-3 numaralı çoklu değişiklik.
+- Renumber: §0 → §1, §1 → §2, §2 → §3, §3 → §4, §5–§9 sabit,
+  §11 → §10. İç atıflar güncellendi (§0.X → §1.X).
+- §0.8 düzeltmesi: kod yorumları TÜRKÇE (önceki metin yanlış
+  çeviriyle İngilizce diyordu).
+- §5.1: sorular Q1, Q2, Q3 sayı ile (harf değil).
+- §7.7.2: yeni test eklendiğinde PASS farkı = tam N; ±2 yalnız
+  yeni test yoksa.
+- §9: SYCOPHANCY tanımı — ajan kullanıcı önerisini değerlendirmek
+  zorunda; tek başına "Haklısın" ihlaldir.
+- Dış atıf: STORM-PROTOKOL.md §0.7 → §1.7.
+- Not: PROTOKOL.md patch'inin ilk tesliminde §7.3 BLOCK B
+  checklist'i gösterilmedi (ihlal); düzeltildi.
 
 CLI örnek kullanımı:
     # Single
@@ -436,12 +517,13 @@ fazlarda (B3.1, B3.2, B3.3, B3.4, B3.5) yine tek commit.
 
 9. SIRADAKİ FAZLAR
 B3.5 Mod 2 — kalan alt turlar (PO onayı 2026-09-23, Round 5 kapandı;
-T1..T6 kapandı 2026-09-24):
+T1..T6 + migration wiring + gözlem metrikleri kapandı 2026-09-25):
 - Rotasyon aktivasyonu: systemd ExecStart'a --enable-rotation eklenir
   (B3.5-A=A); runner kodu değişmez. VM'de kolektör çok-sembol
-  (Top5 WS + Top10 watch) olarak çalışmaya başlar.
-- Gözlem metrikleri (M=B): dashboard 6. panel + /api/v2/observation
-  endpoint.
+  (Top5 WS + Top10 watch) olarak çalışmaya başlar. Git push + VM
+  pull + systemd değişikliği birlikte yapılacak.
+- Gözlem metrikleri (M=B): KAPANDI (dashboard 6. panel +
+  /api/v2/observation). VM deploy git push + pull ile birlikte.
 - Inert mode (AC=A): GET-only allowlist; POST/PUT/DELETE blok;
   /health status=observation_stopped; OBSERVATION_STOPPED tek emit.
 - Stop-flag (H=C): 5s micro-trigger loop'a piggyback (SLA ≤10s);
@@ -486,14 +568,15 @@ B3.4 — Alert entegrasyonu (Telegram/Discord). Mod 1 plan KAPANDI
 (2026-09-23); Mod 2 kod KAPANDI (2026-09-23).
 B3.5 — Çok sembol paper gözlem + gerçek para öncesi 1-2 ay
 değerlendirme. Mod 1 plan KAPANDI; Round 5 KAPANDI (AI=A, AJ=B);
-Mod 2 T1..T6 KAPANDI (2026-09-24); kalan alt turlar SIRADAKİ.
+Mod 2 T1..T6 KAPANDI (2026-09-24); migration wiring + gözlem
+metrikleri KAPANDI (2026-09-25); kalan alt turlar SIRADAKİ.
 
 11. KİLİTLİ KARARLAR (Kümülatif)
 Git/checkpoint:
 Güvenilmeyen commit'ler local'de reset, remote'a force-push ile
 silinir. Önceki checkpoint: 7fb827848aee38897fcea9616d4ea898c294089a
 (REV9 DURUM + BAĞLAM, 2026-09-17).
-Bu oturum checkpoint'i: <COMMIT_HASH> (B3.5 Mod 2 T1..T6 kapanışı).
+Bu oturum checkpoint'i: <COMMIT_HASH> (B3.5 Mod 2 kapanışında).
 Protokol = yöntem, DURUM = içerik. Devir sırasında sadece bu dosya
 güncellenir; PROTOKOL.md sabit kalır.
 B2d çoklu config: --config-a / --config-b.
@@ -795,7 +878,7 @@ B3.4 Mod 2 hedef dosya listesi (§12'de tam liste).
 
 STORM PROTOKOLÜ (yürürlükte):
 Çoklu bağımsız LLM ile karar doğrulama uygulanır. SSOT:
-STORM-PROTOKOL.md. PROTOKOL.md §0.7 atıf. Ağırlık tablosu:
+STORM-PROTOKOL.md. PROTOKOL.md §1.7 atıf. Ağırlık tablosu:
 asistan=1.25, GLM-5.3=2.0, Qwen3.8=1.5, GPT-5/Gemini-2.5-pro/
 Muse Spark 1.1=1.0. Karar eşiği ≥%75 ağırlık → kilit. Asistan
 oy hakkı tabloda; agregasyona dahildir (STORM §2).
@@ -880,11 +963,47 @@ Round 5 (2026-09-23, KAPANDI):
 B3.5 MOD 2 KİLİTLİ KARARLAR (2026-09-24):
   T7=İPTAL  B3.5_REHEARSAL_CHECKLIST.md üretilmedi. Gerekçe:
             checklist içeriği T6 JSON (durum_evidence) + §11'de
-            yaşar; ayrı doküman SSOT'u böler (§0.4). PO sign-off
+            yaşar; ayrı doküman SSOT'u böler (§1.4). PO sign-off
             formalite katmanı gereksiz (tek PO = Eser Göbekli).
             T6 rev1: rehearsal_report.md üretimi kaldırıldı;
             yalnız JSON çıktı (rehearsal_report.json).
             PO kararı: 2026-09-24.
+
+B3.5 MOD 2 EK KİLİTLİ KARARLAR (2026-09-25):
+  MIGRATION WIRING  `_setup_db` içinde alerting migration ÖNCE,
+                    observation migration SONRA. Gerekçe: iki
+                    migration aynı PRAGMA user_version'ı paylaşır;
+                    alerting `current >= SCHEMA_VERSION` erken-dönüş
+                    kullanır. Sıra ters olsaydı alert_events hiç
+                    oluşmazdı. Runner kodu tek noktada kilitli.
+  DASHBOARD PORT    DashboardConfig.port = 10001 tek kaynak; çağıran
+                    taraf override etmez. VM systemd satırı B3.5
+                    kapanışında güncellenecek.
+
+PROTOKOL REFACTOR KİLİTLİ KARARLAR (2026-09-25):
+  SEGMENT MODELİ    "Mod 1 / Mod 2" kaldırıldı. Mesaj = sıralı
+                    segment listesi; her segmentin bir türü var.
+  TÜR LİSTESİ       A (Chat), B (Doküman), C (Kod), D (Dış ajan
+                    prompt'u), E (Kontrol çıktısı). §7.5.6 eski
+                    "Category F — Mixed message" silindi.
+  CONTENT FIDELITY  §1.5.6: FABRICATION / TRIMMING / COMPRESSION
+                    üç yasak; her segment, her dil için geçerli.
+  SSOT İSTİSNALARI  §1.4.2: segment kural listeleri duplicate
+                    edilebilir; §1.5 / §7.5 segment tablosu ikili
+                    (subset kuralı; §7.5 kazanır).
+  DELIVERY SIRASI   §7.6.1: src → tests → pytest satırı.
+  DOSYA BAŞLIĞI     §7.6.2: bir dosya = bir başlık; çoklu değişiklik
+                    1-2-3 numaralı.
+  KOD YORUMLARI     §1.8: kod yorumları TÜRKÇE (önceki metin yanlış
+                    çeviriyle İngilizce diyordu).
+  SORU NUMARASI     §5.1: Q1, Q2, Q3 (harf değil).
+  PASS FARKI        §7.7.2: yeni test varsa fark tam N; ±2 yalnız
+                    yeni test yoksa.
+  SYCOPHANCY        §9: ajan kullanıcı önerisini değerlendirmek
+                    zorunda; tek başına "Haklısın" ihlaldir.
+  RENUMBER          §0 → §1, §1 → §2, §2 → §3, §3 → §4; §5–§9
+                    sabit; §11 → §10. İç atıflar §0.X → §1.X.
+  DIŞ ATIF          STORM-PROTOKOL.md §0.7 → §1.7.
 
 AG REVİZYON KAYDI (2026-09-23, Round 5):
 Round 4 kazananı A (5 ajan + asistan, 6.75x/7.75x). GLM-5.3
@@ -902,8 +1021,10 @@ uygulandı.
 
 12. DOSYA KONUMLARI
 docs/DURUM.md — bu dosya.
-docs/PROTOKOL.md — yöntem dökümanı (sabit; evrensel).
-docs/STORM-PROTOKOL.md — çoklu LLM karar doğrulama (SSOT).
+docs/PROTOKOL.md — yöntem dökümanı (sabit; evrensel). Segment
+modeli yürürlükte (Mod kaldırıldı; A/B/C/D/E).
+docs/STORM-PROTOKOL.md — çoklu LLM karar doğrulama (SSOT);
+PROTOKOL.md §1.7 atıf.
 docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kuralları (ANAYASA
 rolü); B3.4 X=(C)+AE=(A) sonrası §0 Secret satırı güncellendi
 (systemd EnvironmentFile 0600 kanonik).
@@ -1030,6 +1151,35 @@ tests/unit/test_b3_5_ai_schema_freeze.py (YENİ) — 15 test.
 tests/manual/rehearsal_b3_5.py (YENİ) — B3.5-AJ=B rehearsal;
   7 adım (H1..H4 + S1..S3); DI callable; JSON-only çıktı.
 
+B3.5 Mod 2 migration wiring değişen/yeni (2026-09-25):
+tests/shadow/runner.py (DEĞİŞTİ) — import: run_alert_migration +
+  migrate_observation; _setup_db içinde sıra: base tablolar → commit
+  → alerting migration → observation migration → paper manager init
+  → alert config validation.
+tests/shadow/test_b3_5_runner_observation_wiring.py (YENİ) —
+  3 test: tablo varlığı, user_version=1 + tek satır, idempotent.
+
+B3.5 Mod 2 gözlem metrikleri (M=B) değişen/yeni (2026-09-25):
+src/dashboard/app.py (DEĞİŞTİ) — DashboardConfig.port 8080 → 10001;
+  route add_get("/api/v2/observation") + _handle_observation.
+src/dashboard/routes.py (DEĞİŞTİ) — sqlite3 import; __init__
+  keyword-only conn (Y-353 DI); observation() metodu (status
+  türetme: active|stopped|completed).
+src/dashboard/static/index.html (DEĞİŞTİ) — 6. panel Observation;
+  fmtDuration + renderObservation; refreshAll'a observation.
+tests/unit/test_b3_5_observation_endpoint.py (YENİ) — 5 test:
+  no_conn, active, stopped, completed, 20 alan seti.
+tests/unit/test_dashboard_app.py (DEĞİŞTİ) — port assertion
+  8080 → 10001.
+
+PROTOKOL refactor değişen/yeni (2026-09-25):
+docs/PROTOKOL.md (DEĞİŞTİ) — segment modeli; §1.5.6 Content
+  Fidelity; §1.4.2 SSOT istisnaları; §7.5 segment türleri;
+  §7.3 BLOCK B + BLOCK C; §7.6.1 teslim içi sıra; §7.6.2 dosya
+  başlığı; §0.8 kod yorumları TÜRKÇE; §5.1 Q1/Q2/Q3; §7.7.2
+  PASS farkı = tam N; §9 sycophancy tanımı; renumber §0 → §1.
+docs/STORM-PROTOKOL.md (DEĞİŞTİ) — §0.7 → §1.7 dış atıf.
+
 13. YENİ SOHBET NASIL BAŞLAR
 Verilecek dosyalar:
 DURUM.md (bu)
@@ -1039,37 +1189,12 @@ MikoV2-AnaYasa-REV5.md (§0 systemd EnvironmentFile 0600)
 MikoV2-Proje-Tum-Moduller-REV5.md
 
 İlk mesaj:
-"MikoV2 projesine devam ediyoruz. B3.5 Mod 2 T1..T6 kapandı
-(2026-09-24). T7 iptal (PO kararı). B3.5 Mod 2 kalan alt
-turlar sıradaki.
+"MikoV2 projesine devam ediyoruz. B3.5 Mod 2 T1..T6 + migration
+wiring + gözlem metrikleri (M=B) kapandı (2026-09-25). T7 iptal
+(PO kararı). B3.5 Mod 2 kalan alt turlar sıradaki.
 
-Mod: Mod 2 (kod üretimi).
-
-Kalan turlar (B3.5 Mod 2; sıra PO kararına tabi):
-- Rotasyon aktivasyonu: systemd ExecStart --enable-rotation
-  eklenir; runner kodu değişmez (B3.5-A=A).
-- Gözlem metrikleri (M=B): dashboard 6. panel +
-  /api/v2/observation endpoint.
-- Inert mode (AC=A): GET-only allowlist; /health
-  status=observation_stopped; OBSERVATION_STOPPED tek emit.
-- Stop-flag (H=C) 5s piggyback (SLA ≤10s).
-- clean_shutdown_marker (AD=A); auto-finalize (AE=A);
-  OBSERVATION_DAILY_SUMMARY R satırı (U=A).
-
-Kısıtlar:
-- Canlı para YOK.
-- Tek commit B3.5 kapanışında (alt faz kırılımı PO onayına tabi).
-- Python 3.10 (3.11+ syntax yasak).
-- §7.5 çıktı kataloğu + §7.6 kod şablonu + §7.7 test kapısı +
-  §7.8 öz-uyum zorunlu.
-- B3.5 kilitli kararlar (Round 1–5, A–AJ) geçerli; yeniden sorma.
-- §6.3 async_telemetry transient FAIL B3.5 kapsamı DIŞI.
-- observation_state schema mid-phase değişiklik YASAK
-  (B3.5-AI=A kilit).
-- T7 iptal (2026-09-24); B3.5_REHEARSAL_CHECKLIST.md yok.
-- STORM protokolü uygulanır (gerekirse).
-
-İlk tur: rotasyon aktivasyonu teslimi için hazırla."
+İlk tur: rotasyon aktivasyonu teslimi için hazırla (systemd
+ExecStart --enable-rotation; runner kodu değişmez)."
 
 14. UNFROZEN BEYANI
 FROZEN YOK.
