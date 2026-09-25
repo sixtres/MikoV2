@@ -41,6 +41,8 @@ def test_critical_events(event_type):
     # B3.5-AC=A: inert mode transition simetrisi (Q2=B).
     "OBSERVATION_STOPPED",
     "OBSERVATION_RESUMED",
+    # B3.5-AE=A: auto-finalize milestone.
+    "OBSERVATION_COMPLETED",
 ])
 def test_warning_events(event_type):
     assert get_severity(event_type) == SEVERITY_WARNING

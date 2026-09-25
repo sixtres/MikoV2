@@ -51,6 +51,10 @@ EVENT_SEVERITY: Final[dict] = {
     # "her flag transition WARNING").
     "OBSERVATION_STOPPED": SEVERITY_WARNING,
     "OBSERVATION_RESUMED": SEVERITY_WARNING,
+    # B3.5-AE=A: auto-finalize milestone (Q2=B ruhu: tek event).
+    # target_days dolunca paper finalize + inert mode; operator
+    # "bitti" sinyalini Telegram/Discord uzerinden gorur.
+    "OBSERVATION_COMPLETED": SEVERITY_WARNING,
     # INFO
     "SWEEP": SEVERITY_INFO,
     "MSS": SEVERITY_INFO,

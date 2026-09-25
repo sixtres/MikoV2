@@ -243,6 +243,10 @@ class ShadowRunner:
         # B3.5-H=C: stop-flag internal state (observation_state.observation_stop).
         # 5s micro-trigger loop'a piggyback; SLA <=10s. Ilk poll'a kadar False.
         self._observation_stopped: bool = False
+        # B3.5-AE=A: auto-finalize idempotency (in-memory).
+        # Startup'ta DB auto_finalize_done ile senkronlanir; run()
+        # finally blogunda paper.finalize tekrarini onler.
+        self._auto_finalized: bool = False
 
         # Initialize per-symbol state for initial symbols
         for sym in self.symbols:
@@ -1181,6 +1185,7 @@ class ShadowRunner:
             logger.warning("startup obs state read failed: %s", e)
             return
         self._observation_stopped = bool(st.observation_stop)
+        self._auto_finalized = bool(st.auto_finalize_done)
         prev_marker = st.clean_shutdown_marker
         if prev_marker == "clean":
             logger.warning("B3_5_PREV_SHUTDOWN clean (planned)")
@@ -1223,6 +1228,102 @@ class ShadowRunner:
             logger.warning("B3_5_CLEAN_SHUTDOWN_MARKER_WRITTEN")
         except Exception as e:
             logger.warning("clean shutdown marker write failed: %s", e)
+
+    async def _check_auto_finalize(self) -> None:
+        """B3.5-AE=A: target_days dolunca auto-finalize (idempotent).
+
+        Varsayim (PO override edebilir):
+        - target_days olcumu = duvar saati (now - started_at). Net uptime
+          icin outage_total_ms cikarilabilir; alternatif tek satir.
+        - observation_started_at_ms=0 ise ilk cagride now yazilir
+          (clock auto-start; fail-safe).
+
+        Q2=B (self-review): in-memory _observation_stopped DB yazimindan
+        ONCE set edilir; sonraki _poll_observation_stop prev==new gorur,
+        STOPPED emit etmez. Sirayla tek transition = tek event.
+        """
+        if self._conn is None:
+            return
+        if self._auto_finalized:
+            return
+        try:
+            st = load_observation_state(self._conn)
+        except Exception as e:
+            logger.warning("auto-finalize state read failed: %s", e)
+            return
+        if st.auto_finalize_done:
+            self._auto_finalized = True
+            return
+        now_ms = int(time.time() * 1000)
+        if st.observation_started_at_ms <= 0:
+            try:
+                update_observation_state(
+                    self._conn, observation_started_at_ms=now_ms,
+                )
+                logger.warning(
+                    "B3_5_OBSERVATION_STARTED_AT_SET ms=%d", now_ms,
+                )
+            except Exception as e:
+                logger.warning("obs started_at write failed: %s", e)
+            return
+        target_ms = st.target_days * 86_400_000
+        elapsed_ms = now_ms - st.observation_started_at_ms
+        if elapsed_ms < target_ms:
+            return
+
+        logger.warning(
+            "B3_5_AUTO_FINALIZE_TRIGGER target_days=%d elapsed_days=%.2f",
+            st.target_days, elapsed_ms / 86_400_000.0,
+        )
+        # 1) In-memory once (STOPPED emit bastirilir, Q2=B)
+        self._observation_stopped = True
+        self._auto_finalized = True
+        # 2) DB marker (idempotency)
+        try:
+            update_observation_state(
+                self._conn,
+                observation_stop=1,
+                auto_finalize_done=1,
+                observation_completed_ms=now_ms,
+                last_transition_ms=now_ms,
+                last_transition_reason="OBSERVATION_COMPLETED",
+            )
+        except Exception as e:
+            logger.warning("auto-finalize DB write failed: %s", e)
+        # 3) Paper finalize (END_OF_BACKTEST exit'ler)
+        if self._paper is not None:
+            try:
+                self._paper.finalize(
+                    last_ts_ms=now_ms,
+                    last_prices=dict(self._last_price),
+                )
+            except Exception as e:
+                logger.warning(
+                    "auto-finalize paper finalize failed: %s", e
+                )
+        # 4) Emit COMPLETED (WARNING, Q2=B tek event)
+        if self._alert_agent is not None:
+            try:
+                await self._alert_agent.emit(
+                    "OBSERVATION_COMPLETED",
+                    {
+                        "symbol": "OBSERVATION",
+                        "reason": "target_days_reached",
+                        "source": "RUNNER",
+                        "ts_ms": now_ms,
+                        "target_days": st.target_days,
+                        "elapsed_days": round(
+                            elapsed_ms / 86_400_000.0, 2
+                        ),
+                        "source_seq": now_ms,
+                    },
+                )
+            except Exception as e:
+                logger.warning("auto-finalize emit failed: %s", e)
+        logger.warning(
+            "B3_5_OBSERVATION_COMPLETED target_days=%d elapsed_days=%.2f",
+            st.target_days, elapsed_ms / 86_400_000.0,
+        )
 
     async def _handle_micro_trigger_entry(
         self,
@@ -1305,6 +1406,10 @@ class ShadowRunner:
             now_mono = time.monotonic()
             # B3.5-H=C + AC=A: 5s poll (piggyback); SLA <=10s
             await self._poll_observation_stop()
+            # B3.5-AE=A: auto-finalize kontrol (poll'dan SONRA; Q2=B
+            # siralama -- operator zaten stop etmisse STOPPED once,
+            # sonra COMPLETED; aksi halde yalniz COMPLETED).
+            await self._check_auto_finalize()
             for symbol in sorted(self.symbols):
                 if symbol not in self._micro_triggers:
                     continue
@@ -1586,7 +1691,9 @@ class ShadowRunner:
                 self._mark_clean_shutdown()
             # B3.3-N4: paper pozisyonları kapat (END_OF_BACKTEST).
             # Not: restart recovery bu yolu kullanmaz; on_startup kullanır.
-            if self._paper is not None:
+            # B3.5-AE=A: auto-finalize zaten cagirdiysa tekrar cagirma
+            # (paper.finalize idempotency garantisi yok).
+            if self._paper is not None and not self._auto_finalized:
                 try:
                     self._paper.finalize(
                         last_ts_ms=int(time.time() * 1000),
