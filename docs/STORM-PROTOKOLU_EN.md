@@ -21,11 +21,17 @@ How: Stage 1 (prompt preparation) → Stage 2 (agents) → Stage 3
     logical_reasoning, prior_experience, external_doc}.
     sandbox_test → setup + observation detail mandatory.
 1.3 Identity mandatory: family + model + self_reported=true.
-1.4 Format mandatory: answer in a single 4-backtick code block; no
-    language marker; conforms to JSON schema.
+1.4 Format mandatory: answer in a single 4-backtick code block; first
+    line inside the block is the marker `#json`; the remainder is the
+    JSON payload conforming to the answer schema.
 1.5 prompt_version + prompt_version_acknowledged mandatory.
 1.6 Weight table is calibrated; PO changes it.
 1.7 Transparency: every round result in DURUM.md; minority separately.
+1.8 Sandbox-diversity annotation: when a question is sandbox-testable
+    (the answer can be produced by running code locally), an agent
+    returning only code_review or logical_reasoning evidence is
+    annotated in the synthesis as evidence-diversity-incomplete. The
+    answer remains valid; the annotation is a calibration signal.
 
 ## 2. WEIGHT TABLE
 | Agent (family) | Model | Weight |
@@ -36,6 +42,7 @@ How: Stage 1 (prompt preparation) → Stage 2 (agents) → Stage 3
 | Meta | Muse Spark 1.1 | 1.00 |
 | Alibaba | qwen3.8 | 1.50 |
 | Zhipu AI (Z.AI) | glm-5.3 | 2.00 |
+| xAI | grok-4.5 | 1.00 |
 
 Role clarification: Each row in the table represents an agent that
 votes. The assistant row includes both aggregation and voting right:

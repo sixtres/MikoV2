@@ -84,6 +84,8 @@ be a strict subset: type names only, no format rules. If the two ever diverge,
 | Production check scope | §7.4 |
 | Segment type catalog and format | §7.5 |
 | General format rules | §7.5.6 |
+| Shell interaction (Type A) | §7.5.1.1 |
+| Waiting shell commands (Type A) | §7.5.1.2 |
 | Delivery order | §7.6 |
 | Test gate | §7.7 |
 | Test command (SSOT) | §7.7.1 |
@@ -549,6 +551,7 @@ C, or D segment, per §7.1):
 
 Short chat messages and check outputs alone (A and E segments) are outside
 this scope.
+Shell interaction (§7.5.1.1) is outside this scope.
 
 7.5 SEGMENT TYPES AND FORMAT (SSOT)
 
@@ -562,6 +565,37 @@ Format: plain text. Markdown is free (headings, lists, tables, bold,
 italic). Blocks are optional; if a block is used, it is 4-backtick. A
 segment may contain multiple blocks or none.
 Checklist: none.
+
+7.5.1.1 Shell interaction (Type A sub-rule)
+In a Type A segment, a shell command and its output are presented as
+follows:
+- The command goes in its own 4-backtick block. The first line inside
+  the block is the type marker `#bash`.
+- The command output goes in its own 4-backtick block. The first line
+  inside the block is the type marker `#text`.
+- Command and output are NEVER mixed in the same block.
+- The `#bash` / `#text` markers use the same syntactic form as the
+  `#json` marker in §7.5.4 but are NOT restricted to machine-readable
+  payloads; they identify the block's content type.
+- Shell interaction is Type A content; see §7.1 for the delivery
+  trigger.
+
+7.5.1.2 Waiting shell commands (Type A sub-rule)
+If a shell command requires a wait (for a duration, or for a condition)
+before producing meaningful output, the wait MUST be encoded inside the
+command. Instructing the user to "wait N seconds" is FORBIDDEN. The
+command waits, not the user. Three constructs, by intent:
+
+- Fixed wait — `sleep N`:
+    sleep 30 && sudo journalctl -u miko-collector.service -n 30 --no-pager -l
+- Bounded stream follow — `timeout N` around a potentially unbounded
+  command:
+    timeout 320 journalctl -u miko-collector.service -f --no-pager | grep -m1 PATTERN
+- Poll for a condition — `timeout` + `sleep` combined:
+    timeout 60 bash -c 'until systemctl is-active --quiet miko-collector; do sleep 1; done'
+
+Rule of thumb: `sleep` for fixed delay; `timeout` to bound a potentially
+unbounded command; combine when polling. The user is never asked to wait.
 
 7.5.2 Type B — Document
 Scope: file content for human-readable documents: .md, .txt, .pdf (and
@@ -735,6 +769,10 @@ go test ./...)
 - Checklist in plain text (§7.5.5).
 - Do not leave stale citations (§7.2 Check 3).
 - Pin versions (§7.7.2).
+- Shell commands: give them per §7.5.1.1 (command and output in
+  separate 4-backtick blocks with `#bash` / `#text` markers).
+- Waiting shell commands: use one of the three §7.5.1.2 constructs;
+  never ask the user to wait.
 
 ---
 

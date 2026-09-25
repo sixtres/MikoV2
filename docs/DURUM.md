@@ -1,35 +1,62 @@
 # MikoV2 — DURUM
-Durum: B3.5 Round 5 kapandı. B3.5-AI=A kilit (observation_state
-       wide fixed-schema + CHECK(id=1); mid-phase schema freeze
-       yürürlükte). B3.5-AJ=B kilit (iki katmanlı rehearsal
-       go/no-go; hard FAIL = NO-GO; soft WARN = PO onayı).
-       B3.5 Mod 2 T1..T6 kapandı (migration + state + schema
-       freeze absorb + rehearsal). T7 iptal (PO kararı;
-       checklist içeriği T6 JSON + §11'de). B3.5 Mod 2 migration
-       wiring kapandı (T1 → runner._setup_db; alerting önce,
-       observation sonra). Gözlem metrikleri (M=B) kapandı
-       (dashboard 6. panel + /api/v2/observation endpoint).
-       Dashboard port tek kaynaktan 10001.
-Sıradaki: B3.5 Mod 2 kalan (rotasyon aktivasyonu + inert mode +
-       stop-flag + AD/AE/U). Tek commit B3.5 kapanışında.
+Durum: B3.5 Mod 2 KAPANDI (2026-09-26, 5 commit). B3.5-AI=A kilit
+       (observation_state wide fixed-schema + CHECK(id=1); mid-phase
+       schema freeze TÜM turlar boyunca ihlal edilmedi).
+       B3.5-AJ=B kilit (iki katmanlı rehearsal go/no-go; hard FAIL =
+       NO-GO; soft WARN = PO onayı).
+       B3.5 Mod 2 T1..T6 kapandı (migration + state + schema freeze
+       absorb + rehearsal). T7 iptal (PO kararı; checklist içeriği T6
+       JSON + §11'de). B3.5 Mod 2 migration wiring kapandı (T1 →
+       runner._setup_db; alerting önce, observation sonra). Gözlem
+       metrikleri (M=B) kapandı (dashboard 6. panel + /api/v2/observation
+       endpoint). Dashboard port tek kaynaktan 10001.
+       PROTOKOL.md segment refactor kapandı (Mod kaldırıldı; segment
+       A/B/C/D/E; §0→§1 renumber). PROTOKOL.md §7.5.1.1 + §7.5.1.2
+       eklendi (shell interaction + waiting komutları).
+       --- B3.5 Mod 2 kalan turlar KAPANDI (2026-09-25/26) ---
+       Rotasyon aktivasyonu (B3.5-A=A) kapandı: systemd drop-in
+       override.conf; --enable-rotation; VM canlı ws_subs=5 watch=5.
+       Bulk contract-size fix (B3.5-SORU 1=B) kapandı: UniverseService
+       .scan() ilk çağrıda fetch_all_contract_details(); n=1184; DI
+       öncelikli; hata → sonraki scan'de retry.
+       Stop-flag (H=C) kapandı: _poll_observation_stop 5s micro-trigger
+       loop'a piggyback; SLA ≤10s; canlı doğrulandı.
+       Inert mode (AC=A) kapandı: 4 STORM kararı (Q1=A, Q2=B, Q3=A,
+       Q4=B) + PO eklentisi OBSERVATION_RESUMED; canlı STOPPED/RESUMED
+       + restart guard doğrulandı; inert middleware canlı testi
+       deferred (dashboard ayrı süreç).
+       clean_shutdown_marker (AD=A) kapandı: startup unclean; exit
+       clean; planned/unplanned ayrımı; canlı doğrulandı.
+       auto-finalize (AE=A) kapandı: target_days duvar saati; clock
+       auto-start; paper.finalize; OBSERVATION_COMPLETED tek emit;
+       canlı doğrulandı.
+       OBSERVATION_DAILY_SUMMARY (U=A) DEFERRED (PO kararı 2026-09-26).
+       Telegram stratejisi PO kararıyla güncellendi (canlı+nakit öncesi
+       yok; canlı fazda sadece pozisyon aç/kapa).
+Sıradaki: B3.5 gözlem süresi (30 gün checkpoint + 60 gün final;
+       B3.5-B=B). Kod tarafı kapandı; veri birikimi doğal akışta.
+       Dashboard VM'de ayrı süreç; aktif edilirse inert middleware
+       canlı doğrulaması yapılır. Sonraki faz: B3.5+1 / B4.0
+       (canlı+nakit kapısı; SORU SS=C).
 Amaç: Yeni sohbete başlarken bağlamı hızlıca aktarmak.
 PO: Eser Göbekli
 Önceki: REV7 (FAZ 6/7/8 kapanış) → REV9 (dashboard + universe +
 shadow collector + backtest B0.x-B1) → protokol entegrasyonu →
 BAGLAM.txt entegrasyonu → arşiv referansı temizliği → B1/B2a/B2b
-doğrulama + DB transfer → B2c öncesi analiz + SWEEP yön fix →
-protokol entegrasyonu → SSOT temizliği → B2c başlangıç kriterleri
-kilitlendi → B2c kapanış → B2d kapanış → B2e planı kilitlendi →
-B2e.−1 + B2e.0 kapandı → B2e tüm alt fazlar kapandı → B3.1 plan
-onaylandı → B3.1 kapandı → B3.2 plan onaylandı → protokol dökümanı
-geçişi (PROTOKOL.md yürürlükte) → B3.2 kapandı → B3.3 kapandı →
-B3.4 Mod 1 kapandı → B3.4 Mod 2 kapandı → B3.5 Mod 1 plan
-snapshot'ı 4 tur STORM ile kapandı (23 karar A–AH) → B3.5 Round 5
-kapandı (AI=A, AJ=B) → B3.5 Mod 2 T1..T6 kapandı (migration +
-state + schema freeze + rehearsal; 35 yeni test) → T7 iptal →
-migration wiring + gözlem metrikleri (M=B) kapandı → PROTOKOL.md
-segment refactor (Mod kaldırıldı; segment türleri A/B/C/D/E;
-renumber §0→§1).
+doğrulama + DB transfer → B2c öncesi analiz + SWEEP yön fix → protokol
+entegrasyonu → SSOT temizliği → B2c başlangıç kriterleri kilitlendi →
+B2c kapanış → B2d kapanış → B2e planı kilitlendi → B2e.−1 + B2e.0
+kapandı → B2e tüm alt fazlar kapandı → B3.1 plan onaylandı → B3.1
+kapandı → B3.2 plan onaylandı → protokol dökümanı geçişi (PROTOKOL.md
+yürürlükte) → B3.2 kapandı → B3.3 kapandı → B3.4 Mod 1 kapandı →
+B3.4 Mod 2 kapandı → B3.5 Mod 1 plan snapshot'ı 4 tur STORM ile
+kapandı (23 karar A–AH) → B3.5 Round 5 kapandı (AI=A, AJ=B) → B3.5
+Mod 2 T1..T6 kapandı (migration + state + schema freeze + rehearsal;
+35 yeni test) → T7 iptal → migration wiring + gözlem metrikleri
+(M=B) kapandı → PROTOKOL.md segment refactor (Mod kaldırıldı; segment
+türleri A/B/C/D/E; renumber §0→§1) → **B3.5 Mod 2 kalan turlar
+(rotasyon aktivasyonu + bulk contract-size + stop-flag + inert mode
++ clean_shutdown_marker + auto-finalize) kapandı (2026-09-25/26).**
 
 0. ÇALIŞMA YÖNTEMİ
 MikoV2 — MEXC Futures (vadeli) kripto trading botu. Kağıt-öncelikli
@@ -67,6 +94,8 @@ yöntem:
     Dönen URL'ye /dl/ ekle, tarayıcıdan indir.
     Local'de tar -xzf dosya.tar.gz ile aç.
 Not: transfer.sh, 0x0.st kapalı/kısıtlı (2026-09-19 itibariyle).
+Not: B3.5 Mod 2 kalan turlar boyunca scp/curl gerekmedi; VM çıktıları
+doğrudan sohbete yapıştırıldı.
 
 1. TAMAMLANAN FAZLAR
 | Faz|Kapsam|Durum|
@@ -107,28 +136,45 @@ Not: transfer.sh, 0x0.st kapalı/kısıtlı (2026-09-19 itibariyle).
 | B3.5 Mod 2 migration wiring|T1 → runner._setup_db (alerting→observation sırası); +3 test|Kapandı (2026-09-25, lokal)|
 | B3.5 Mod 2 gözlem metrikleri (M=B)|dashboard 6. panel + /api/v2/observation; port 10001; +5 test|Kapandı (2026-09-25, lokal)|
 | PROTOKOL.md segment refactor|Mod kaldırıldı; segment türleri A/B/C/D/E; §0→§1 renumber|Kapandı (2026-09-25)|
-| B3.5 Mod 2 (kalan)|rotasyon + inert mode + stop-flag + AD/AE/U|Sıradaki|
+| PROTOKOL.md §7.5.1.1 + §7.5.1.2|shell interaction + waiting komutları|Kapandı (2026-09-25)|
+| B3.5 rotasyon aktivasyonu|systemd drop-in --enable-rotation; canlı ws_subs=5 watch=5|Kapandı (2026-09-25)|
+| B3.5 bulk contract-size fix (SORU 1=B)|UniverseService.scan() ilk çağrı; n=1184; canlı doğrulandı|Kapandı (2026-09-25)|
+| B3.5 stop-flag (H=C)|_poll_observation_stop 5s piggyback; canlı doğrulandı|Kapandı (2026-09-25)|
+| B3.5 inert mode (AC=A)|4 STORM kararı + RESUMED; canlı doğrulandı|Kapandı (2026-09-26)|
+| B3.5 clean_shutdown_marker (AD=A)|startup unclean; exit clean; canlı doğrulandı|Kapandı (2026-09-26)|
+| B3.5 auto-finalize (AE=A)|target_days; clock auto-start; tek COMPLETED; canlı doğrulandı|Kapandı (2026-09-26)|
+| B3.5 OBSERVATION_DAILY_SUMMARY (U=A)|—|DEFERRED (PO 2026-09-26)|
+| B3.5 gözlem süresi (30g/60g)|Kod kapandı; veri birikimi doğal akışta|Devam ediyor|
 | B2e.real|Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
 
 2. TEST DURUMU
-Toplam: 1039 PASS (T1..T6 sonrası + migration wiring +3 test).
-M=B turu sonrası +5 yeni test (test_b3_5_observation_endpoint.py);
-tam suite henüz koşulmadı; dashboard grubu subset 26 PASS.
+Toplam: **1079 PASS** (B3.5 Mod 2 kapanış).
+Commit zinciri: 560afff (bulk fix) → 9dec847 (stop-flag) →
+098190e (inert mode) → f90bfff (clean_shutdown) → 2c311b5
+(auto-finalize).
 Alt faz dağılımı: B2d 17; B2e.−1 15; B2e.0 18; B2e.1 11; B2e.1S 8;
 B2e.2 11; B2e.2S 4; B2e.3 24; B3.1 15 (8 unit + 7 integration);
 B3.2 20 (13 micro_trigger + 7 runner integration); B3.3 37
 (17 paper_math + 13 paper_manager + 7 runner integration);
 B3.4 Mod 2 87 (12 migration + 29 event_catalog + 18 formatter
-+ 21 agent + 7 runner integration); B3.5 Mod 2 38 (9 migration
++ 21 agent + 7 runner integration); B3.5 Mod 2 T1..T6 38 (9 migration
 + 11 state + 15 schema_freeze + 3 runner observation wiring);
-B3.5 Mod 2 M=B 5 (observation endpoint; tam suite pending).
+B3.5 Mod 2 M=B 5 (observation endpoint);
+B3.5 Mod 2 kalan turlar (bu oturum):
+- test_b3_5_universe_bulk_contract_size.py (4)
+- test_b3_5_stop_flag.py (6)
+- test_b3_5_inert_mode.py (10)
+- test_b3_5_shutdown_marker.py (6)
+- test_b3_5_auto_finalize.py (6)
+- test_alerting_event_catalog.py (+3 parametrize satırı)
+Toplam bu oturum: +35 PASS.
 Komut: pytest tests/ -q --tb=short --maxfail=1
-Bilinen transient FAIL (tests/chaos/test_queue_full.py:168) B3.3
-ve B3.4 koşularında gözlenmedi. §6.3'te belgelenen mp.Queue feeder
-timing kaynaklı; izlenmeye devam.
-Yakalanan kritik bug'lar: WS dead silent (pong data maskesi),
-mp.Queue blocking event loop, DROP_OLDEST -> DROP_NEWEST race,
-429 circuit breaker eksikliği, SWEEP yön mapping tersliği
+Bilinen transient FAIL (tests/chaos/test_queue_full.py:168) B3.3,
+B3.4 ve B3.5 koşularında gözlenmedi. §6.3'te belgelenen mp.Queue
+feeder timing kaynaklı; izlenmeye devam.
+Yakalanan kritik bug'lar (kümülatif): WS dead silent (pong data
+maskesi), mp.Queue blocking event loop, DROP_OLDEST -> DROP_NEWEST
+race, 429 circuit breaker eksikliği, SWEEP yön mapping tersliği
 (Bkz §7), SORU G/H slippage/SL floor (B2c, Bkz §7), B2e.0
 `PositionSimulator.finalize` imza değişikliği sonrası
 `backtest_run.py` çağrısı kırıldı (B2e.3'te düzeltildi), B3.1
@@ -142,12 +188,27 @@ kırılganlık (ast walk'a çevrildi), T5 kolon sayımı (20→21),
 B3.5 Mod 2 migration wiring shared PRAGMA user_version sırası
 (alerting erken-dönüş observation'ı bloke edecekti; alerting
 önce çağrılarak çözüldü).
+Bu oturumda yakalanan bug'lar:
+- Test verisi yanlıştı: test_b3_5_universe_bulk_contract_size
+  `hold_vol` düşük → min_oi_usd eşiği geçilmedi → fix test datada.
+- test_b3_5_stop_flag async ihlali: `_poll_observation_stop`
+  async'e çevrildikten sonra bir çağrı sync kalmış → unawaited
+  coroutine uyarısı + yanlış assertion.
+- test_flag_flip_reflected AC=A uyumsuz: `emits` listesine
+  OBSERVATION_STOPPED dahil oldu; assertion ENTRY filtresine çevrildi.
+- tests/shadow/runner.py: `finally` bloğunda paper.finalize
+  auto-finalize sonrası ikinci kez çağrılıyor olabilirdi; `_auto_finalized`
+  guard eklendi.
 
 3. RUNTIME — VM'DE AKTİF OLAN
 Shadow collector (systemctl status miko-collector):
 tests/shadow/runner.py — servis olarak çalışıyor, Restart=always.
 Deployment: systemd (KANONİK, B3.4 X=(C) sonrası); Docker
 opsiyonel, test edilmemiş (B3.5'e ertelendi).
+systemd override (B3.5 Mod 2 kalan):
+/etc/systemd/system/miko-collector.service.d/override.conf
+ExecStart sonunda `--enable-rotation` ekler; kanonik unit
+dokunulmadı.
 3 veri kanalı:
 L2 depth — orderbook_snapshots (60s interval, 500 seviye)
 Trade OHLCV 1s — trades_ohlcv_1s (USDT-normalized, CVD için)
@@ -161,16 +222,24 @@ B3.4: AlertAgent canlı (env-gated). Env yoksa devre dışı; sistem
 PRAGMA user_version) → AlertAgent init+start (session sonrası)
 → paper on_startup (rehydration) → run loop. Migration alert_events
 + micro_trigger_events tabloları aynı DB'ye yazılır.
-B3.5 Mod 2 (lokal): observation_state migration + state.py +
-schema freeze testleri + rehearsal script'i + migration wiring
-(_setup_db içinde alerting → observation sırası) + gözlem
-metrikleri (dashboard 6. panel + /api/v2/observation). VM'de
-henüz çalıştırılmadı; git push + VM pull + systemd
---enable-rotation aktivasyonu ile birlikte yapılacak.
+B3.5 Mod 2 (VM'de aktif):
+- observation_state migration (uv=1)
+- migration wiring sırası: alerting → observation
+- /api/v2/observation (dashboard ayrı süreç; VM'de aktif değil)
+- Rotasyon: Top5 WS + Top10 watch; canlı doğrulandı
+  (ws_subs=5 watch=5; top5=[BTC, SOL, XRP, SUI, DOGE];
+  watch=[NEAR, PEPE, TAO, ONDO, LTC])
+- Bulk contract-size: ilk scan'de n=1184 fetch
+- Stop-flag: 5s poll; SLA ≤10s
+- Inert mode: middleware auth sonrası; unit test kapsar;
+  dashboard VM'de aktif değil → canlı test deferred
+- clean_shutdown_marker: startup unclean; exit clean
+- auto-finalize: observation_started_at_ms=1790370937201
+  (ilk tick'te auto-set); target_days=60
 Veritabanı: Bkz §0 (WAL mode).
-Dashboard: http://<VM_IP>:10001/ (aiohttp.web, 11 endpoint, Chart.js)
-Not: port tek kaynaktan gelir (DashboardConfig.port = 10001);
-çağıran taraf override etmez.
+Dashboard: http://<VM_IP>:10001/ (aiohttp.web, 11 endpoint,
+Chart.js). Not: port tek kaynaktan gelir (DashboardConfig.port =
+10001); çağıran taraf override etmez. VM'de ayrı süreç; aktif değil.
 B3.4 E=B' panel: alert counter + history pull + test button + status
 panel (SSE YOK). U=(D): tüm /api/* Authorization header zorunlu;
 SSE query param deprecated fallback (EventSource custom header
@@ -180,32 +249,28 @@ B3.5 M=B: 6. panel "Observation"; /api/v2/observation endpoint
 (salt-okuma; observation_state tek satır). status alanı
 observation_stop/auto_finalize_done'dan türetilir
 (active|stopped|completed).
-Not: Kolektör şu an tek sembol (BTC_USDT). Çok-sembol genişleme
-B3.1 Mod 2'de kod olarak hazır; VM'de aktivasyon
-`--enable-rotation` flag'ine bağlı; B3.5 Mod 2'de aktif edilecek
-(PO onayı ile).
+B3.5 AC=A: inert modda /api/v2/health 200 + status=observation_stopped
+(503 değil); non-GET /api/* 503 (auth sonrası).
 
-DB MEVCUT DURUM (2026-09-21):
-- trades_ohlcv_1s: BTC_USDT tek sembol, 332216 satır, span 347517 sn
-  (~97.8h).
-- orderbook_snapshots: 8729 satır / 8729 distinct timestamp_ms
-  (duplicate yok; beklenen ~5868 → %149, 60s'den sık yazılmış).
-- tickers_snapshot: 4621 satır BTC_USDT (60s beklenen ~5868, %79).
-- OHLCV veri kalitesi: 423 gap, max gap 14572 sn (~4.05h), toplam
-  15297 sn eksik, completeness ≈ %95.6.
+DB MEVCUT DURUM (2026-09-26 ~21:15 UTC):
+- trades_ohlcv_1s: BTC_USDT + SOL/XRP/SUI/DOGE (rotasyon sonrası);
+  çok sembol veri akışı aktif.
+- observation_state: id=1; observation_stop=0;
+  observation_started_at_ms=1790370937201; target_days=60;
+  clean_shutdown_marker=clean; last_transition_reason=OBSERVATION_RESUMED.
 
 4. KRİTİK MODÜLLER
 | Modül|Görev|
 | ---|---|
 | src/data_layer/mexc_ws.py|sub.depth + sub.deal WS + watchdog; B3.1: dinamik subscribe/unsubscribe/subscribed_symbols|
-| src/data_layer/mexc_rest.py|Snapshot + contract_size + funding|
-| src/data_layer/metrics_fetcher.py|1176 sembol bulk filtre + skorlama (§6.1 funding ceza; excluded_symbols DI)|
-| src/data_layer/universe_service.py|Universe scan orkestrasyonu (§6.2 exclude + ScanResult.excluded_symbols); B3.1: RotationDecision + hysteresis + flap (round-trip) + üstel quarantine + 7 gün stabil reset|
+| src/data_layer/mexc_rest.py|Snapshot + contract_size + funding; B3.5: fetch_all_contract_details (bulk)|
+| src/data_layer/metrics_fetcher.py|1176 sembol bulk filtre + skorlama (§6.1 funding ceza; excluded_symbols DI); B3.5: update_contract_sizes|
+| src/data_layer/universe_service.py|Universe scan orkestrasyonu (§6.2 exclude + ScanResult.excluded_symbols); B3.1: RotationDecision + hysteresis + flap (round-trip) + üstel quarantine + 7 gün stabil reset; B3.5-SORU 1=B: scan() ilk çağrıda bulk contract-size fetch|
 | src/data_layer/l2_buffer.py|Çok-sembol L2 book buffer (L2Book per symbol)|
 | src/data_layer/constants.py|EXCLUDED_SYMBOLS + EXCLUDED_SYMBOLS_VERSION (§6.2 kanonik liste)|
 | src/storage/mark_price_cache.py|WS -> REST mark price cache|
 | src/storage/equity_tracker.py|60s + close-triggered equity snap|
-| src/dashboard/app.py + routes.py|aiohttp.web server; B3.4: auth middleware (/api/* Authorization zorunlu) + 3 alert endpoint; B3.5 M=B: /api/v2/observation endpoint + DashboardConfig.port tek kaynak (10001)|
+| src/dashboard/app.py + routes.py|aiohttp.web server; B3.4: auth middleware (/api/* Authorization zorunlu) + 3 alert endpoint; B3.5 M=B: /api/v2/observation endpoint + DashboardConfig.port tek kaynak (10001); B3.5 AC=A: inert check middleware (auth sonrası; non-GET 503); health status=observation_stopped|
 | src/dashboard/static/index.html|5 panel + Chart.js + SSE; B3.4: 5. panel (Alerts); B3.5 M=B: 6. panel (Observation); token localStorage|
 | src/backtest/replay_transport.py|SQLite 3-tablo merge -> stream; stream_multi; collect_ohlcv_secs / collect_ticker_secs / collect_depth_secs (B2e.3 coverage)|
 | src/backtest/engine.py|Event dispatch engine|
@@ -216,14 +281,14 @@ DB MEVCUT DURUM (2026-09-21):
 | src/backtest/multi_report.py|B2e.3 — G′ rapor şeması; SCHEMA_VERSION=1; CLAIM_* enum; build_report saf fonksiyon; data_quality{profile, by_symbol, aggregate}; dropped_entries_by_reason/by_symbol (SORU A3); excluded_symbols{all, effective, version} (SORU BB′)| 
 | src/backtest/reporting.py|B2d — genişletilmiş rapor (Sharpe, PF, expectancy, equity curve)|
 | src/backtest/data_quality.py|B2e.0 — gap/completeness detection; B2e.3 — ticker/depth coverage da (SORU XX)|
-| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation. B3.2: MicroTrigger canlı (5s evaluate) + shadow Strategy paralel + TRIGGER → EntrySignal JSON log + per-symbol quarantine skip + _init_symbol_state. B3.3: PaperPositionManager bağlaması. B3.4: AlertAgent bağlaması. B3.5 Mod 2: _setup_db içinde alerting → observation migration sırası (shared PRAGMA user_version)|
+| tests/shadow/runner.py|Shadow collector — B3.1: çok-sembol state + iki timer (30s scan / 5dk WS rotasyon) + watch REST ticker + per-symbol watchdog + Top5→Top4 uyarı + --enable-rotation. B3.2: MicroTrigger canlı (5s evaluate) + shadow Strategy paralel + TRIGGER → EntrySignal JSON log + per-symbol quarantine skip + _init_symbol_state. B3.3: PaperPositionManager bağlaması. B3.4: AlertAgent bağlaması. B3.5 Mod 2: _setup_db içinde alerting → observation migration sırası (shared PRAGMA user_version); _poll_observation_stop + _emit_observation_transition + _sync_observation_state_on_startup + _mark_clean_shutdown + _check_auto_finalize + _handle_micro_trigger_entry helper; clean_exit + auto_finalized in-memory guard|
 | src/features/micro_trigger.py|Per-symbol MicroTrigger state machine (IDLE->SWEEP->MSS->FVG_OTE->MICRO_CONFIRM->TRIGGER); paused_ms, hard deadline 600s, quarantine, next_candle, per-symbol asyncio.Lock. B3.2: quarantine_until_ms + is_quarantined() + quarantine(symbol, reason) + MICRO_TRIGGER_QUARANTINE event|
 | src/trading/paper_math.py|B3.3 — ortak math çekirdeği (saf fonksiyonlar); backtest ve paper manager paylaşır|
 | src/execution/paper_position_manager.py|B3.3 — PaperPositionManager (canlı paper trading). on_entry (global asyncio.Lock + stale_price + ATR guard); on_ohlcv (5s kova exit; SL önce; entry_bucket_sec atlanır); on_ws_tick; on_ticker (funding); on_startup (DB rehydration); finalize (END_OF_BACKTEST); SQLite paper_positions + paper_events (UNIQUE idempotency); get_open_position_qty (A.3)|
 | tests/manual/backtest_run.py|Backtest CLI: --symbol (single); --symbols + --mode (multi|walkforward); --train-ms/--test-ms/--step-ms; --data-quality-profile; --config-a/b; --equity-csv; --report|
 | src/alerting/__init__.py (B3.4)|Paket marker; migration public API export|
 | src/alerting/migration.py (B3.4)|Tek migration bloğu (Y=(D)): alert_events (5-durumlu delivery_status) + micro_trigger_events + 4 index + PRAGMA user_version; chunked_delete_older_than rowid alt-sorgu (AJ); retention sabitleri (micro 3 gün / alert 7 gün)|
-| src/alerting/event_catalog.py (B3.4)|R 22-satır event→seviye eşleme sözlüğü (literal tabloyla uyum); EXIT reason-aware; bilinmeyen event_type → WARNING + "uncataloged" log|
+| src/alerting/event_catalog.py (B3.4)|R 22-satır event→seviye eşleme sözlüğü + B3.5 eklemeleri (OBSERVATION_STOPPED + OBSERVATION_RESUMED + OBSERVATION_COMPLETED); EXIT reason-aware; bilinmeyen event_type → WARNING + "uncataloged" log|
 | src/alerting/formatter.py (B3.4)|Telegram HTML (sınırlı tag seti: b/code; html.escape) + Discord plain text; TR dil; secret-mask tek nokta (4 regex); parse/format exception → parse_mode=None degrade; batch header "MikoV2 Uyarı Grubu (N=…)"; AA dedup "xN son Wdk"|
 | src/alerting/agent.py (B3.4)|Telegram + Discord config-driven; rate limit 30s; batch 5/5s; PriorityQueue CRITICAL bypass; dedup sembol+event_type 60s + sayıyla birleştirme; circuit breaker (5 ardışık alert-başına nihai fail → OPEN 60s → HALF_OPEN 1 test); retry 3; pending TTL 10dk startup sweep; AB4 optimistic lock; S=(D) alert_events tek doğruluk; Z=(C) network sırasında DB txn açık tutulmaz; Ş2 fail-fast; Ş3 DI; config_from_env (MIKOV2_ALERT_*; Y-269 int whitelist)|
 | src/observation/__init__.py (B3.5)|Paket marker; migration public API export|
@@ -242,6 +307,8 @@ Exclude: EXCLUDED_SYMBOLS (constants.py, §6.2) skorlama ve
 normalizasyondan önce uygulanır.
 Örnek Top5 (2026-09-17): BTC_USDT, SOL_USDT, XAUT_USDT, XRP_USDT,
 ONE_USDT. Not: XAUT artık exclude (§6.2).
+VM canlı (2026-09-26): top5=[BTC, SOL, XRP, SUI, DOGE];
+watch=[NEAR, PEPE, TAO, ONDO, LTC].
 
 6. AÇIK SORUNLAR
 6.1 Funding rate aşırı değerler "fırsat" olarak görülüyor
@@ -302,6 +369,26 @@ Moduller-REV5.md (mimari referans, opsiyonel) + STORM-PROTOKOL.md.
 PROTOKOL.md sabittir; devir sırasında güncellenmez.
 Durum: UYGULANDI.
 
+6.7 DURUM §3 port stale notu (DÜZELTİLDİ 2026-09-26)
+Sorun: Önceki sürümde "Mevcut VM'deki systemd `--port 8090` satırı
+B3.5 kapanışında güncellenecek" yazıyordu.
+Bulgu: VM systemd ExecStart'ta `--port` argümanı HİÇ YOK; port 10001
+kod içinden tek kaynak (DashboardConfig.port). Mevcut systemd
+override.conf yalnız `--enable-rotation` ekler.
+Durum: DÜZELTİLDİ.
+
+6.8 U=A OBSERVATION_DAILY_SUMMARY — DEFERRED
+PO kararı (2026-09-26): günlük özet şimdilik gereksiz. Dashboard
+görünürlüğü yeterli. Rapor ihtiyacı doğduğunda (canlı+nakit sonrası)
+B3.5+1 / B4.x kapsamında geri alınır.
+Durum: DEFERRED.
+
+6.9 Telegram stratejisi güncellendi (PO 2026-09-26)
+Karar: canlı+nakit işlemlere geçene kadar Telegram yok. Canlı fazda
+SADECE pozisyon aç/kapa mesajı. B3.4 kod (Telegram + Discord
+env-gated) mevcut haliyle kalır; dokunulmuyor.
+Durum: KAYIT.
+
 7. BACKTEST İLERLEME
 | İş|Durum|
 | ---|---|
@@ -327,9 +414,16 @@ Durum: UYGULANDI.
 | B3.5 Round 5 — Schema freeze (AI=A) + rehearsal (AJ=B)|Kapandı (2026-09-23)|
 | B3.5 Mod 2 T1..T6 — observation_state migration + state + schema freeze + rehearsal|Kapandı (2026-09-24)|
 | B3.5 Mod 2 T7 — Rehearsal checklist|İPTAL (PO kararı 2026-09-24)|
-| B3.5 Mod 2 migration wiring — T1 → runner._setup_db|Kapandı (2026-09-25, lokal)|
-| B3.5 Mod 2 gözlem metrikleri (M=B) — panel + endpoint|Kapandı (2026-09-25, lokal)|
-| B3.5 Mod 2 kalan — rotasyon + inert mode + stop-flag + AD/AE/U|Sıradaki|
+| B3.5 Mod 2 migration wiring — T1 → runner._setup_db|Kapandı (2026-09-25)|
+| B3.5 Mod 2 gözlem metrikleri (M=B) — panel + endpoint|Kapandı (2026-09-25)|
+| B3.5 Mod 2 rotasyon aktivasyonu|Kapandı (2026-09-25)|
+| B3.5 Mod 2 bulk contract-size fix|Kapandı (2026-09-25)|
+| B3.5 Mod 2 stop-flag (H=C)|Kapandı (2026-09-25)|
+| B3.5 Mod 2 inert mode (AC=A)|Kapandı (2026-09-26)|
+| B3.5 Mod 2 clean_shutdown_marker (AD=A)|Kapandı (2026-09-26)|
+| B3.5 Mod 2 auto-finalize (AE=A)|Kapandı (2026-09-26)|
+| B3.5 Mod 2 OBSERVATION_DAILY_SUMMARY (U=A)|DEFERRED (PO 2026-09-26)|
+| B3.5 gözlem süresi (30g/60g)|Devam ediyor|
 | B2e.real — Gerçek çok sembol gate (S′)|Veri birikimine bağlı (≥30 gün)|
 
 B3.3 kapsamı (kapandı): ShadowRunner'a PaperPositionManager
@@ -415,11 +509,11 @@ B3.5 Mod 2 gözlem metrikleri (M=B) kapsamı (kapandı 2026-09-25, lokal):
 - src/dashboard/static/index.html: 6. panel "Observation"; `fmtDuration`
   + `renderObservation`; `refreshAll()` güncellendi.
 - Port tek kaynak: `DashboardConfig.port = 10001`; çağıran taraf
-  override etmez. (Mevcut VM'deki systemd `--port 8090` satırı B3.5
-  kapanışında güncellenecek.)
+  override etmez. (Mevcut VM'deki systemd `--port` satırı YOK;
+  B3.5 kapanışında §6.7 düzeltildi.)
 - Test: tests/unit/test_b3_5_observation_endpoint.py (5 PASS);
   tests/unit/test_dashboard_app.py port assertion 8080 → 10001.
-  Dashboard grubu subset 26 PASS. Tam suite pending.
+  Dashboard grubu subset 26 PASS.
 
 PROTOKOL.md segment refactor kapsamı (kapandı 2026-09-25):
 - "Mod 1 / Mod 2" kavramı kaldırıldı. Yerine "segment" modeli:
@@ -436,8 +530,7 @@ PROTOKOL.md segment refactor kapsamı (kapandı 2026-09-25):
   §7.6.2 bir dosya = bir başlık + 1-2-3 numaralı çoklu değişiklik.
 - Renumber: §0 → §1, §1 → §2, §2 → §3, §3 → §4, §5–§9 sabit,
   §11 → §10. İç atıflar güncellendi (§0.X → §1.X).
-- §0.8 düzeltmesi: kod yorumları TÜRKÇE (önceki metin yanlış
-  çeviriyle İngilizce diyordu).
+- §0.8 düzeltmesi: kod yorumları TÜRKÇE.
 - §5.1: sorular Q1, Q2, Q3 sayı ile (harf değil).
 - §7.7.2: yeni test eklendiğinde PASS farkı = tam N; ±2 yalnız
   yeni test yoksa.
@@ -446,6 +539,117 @@ PROTOKOL.md segment refactor kapsamı (kapandı 2026-09-25):
 - Dış atıf: STORM-PROTOKOL.md §0.7 → §1.7.
 - Not: PROTOKOL.md patch'inin ilk tesliminde §7.3 BLOCK B
   checklist'i gösterilmedi (ihlal); düzeltildi.
+
+PROTOKOL.md §7.5.1.1 + §7.5.1.2 + §1.4.3 + §7.4 + §8 (kapandı
+2026-09-26, PO onayı):
+- §7.5.1.1 Shell interaction: komut ayrı 4-backtick blok (blok-içi
+  marker `#bash`), çıktı ayrı blok (blok-içi marker `#text`); komut
+  ve çıktı AYNI blokta karıştırılmaz; `#bash`/`#text` markerları
+  §7.5.4'teki `#json` ile aynı biçimde ama machine-readable
+  kısıtlaması yok; shell etkileşimi teslim sayılmaz (§7.1).
+- §7.5.1.2 Waiting shell commands: kullanıcı beklemez, komut bekler.
+  Üç kalıp: `sleep N` (sabit bekleme), `timeout N` (sınırlı stream),
+  `timeout` + `sleep` (koşul polling).
+- §1.4.3 Ownership Table: iki satır eklendi (Shell interaction →
+  §7.5.1.1; Waiting shell commands → §7.5.1.2).
+- §7.4: "Shell interaction (§7.5.1.1) is outside this scope."
+  cümlesi eklendi.
+- §8: iki bullet eklendi (shell komutları §7.5.1.1 formatında;
+  bekleyen komutlar §7.5.1.2 üç kalıbından biri).
+
+B3.5 Mod 2 rotasyon aktivasyonu kapsamı (kapandı 2026-09-25):
+- B3.5-A=A kilitli karar: systemd ExecStart'a --enable-rotation;
+  runner kodu değişmez.
+- /etc/systemd/system/miko-collector.service.d/override.conf
+  (YENİ): ExecStart override; boş ExecStart= satırı + yeni tam komut.
+  Kanonik unit dosyası dokunulmadı.
+- VM canlı doğrulandı: 20:06:16 B3_1_ROTATION_SUB DOGE/SOL/SUI/XRP;
+  20:06:24 tick ws_subs=5 watch=5.
+- Not: DURUM §3'te eski "--port 8090 satırı güncellenecek" notu
+  yanlıştı; §6.7'de düzeltildi.
+
+B3.5 Mod 2 bulk contract-size fix kapsamı (kapandı 2026-09-25):
+- SORU 1=B (PO onayı): Bulk contract-size fetch UniverseService
+  .scan() ilk çağrıda; DI ile gelen değerler öncelikli; fetcher
+  mevcut anahtarları ezmez.
+- src/data_layer/metrics_fetcher.py: update_contract_sizes metodu.
+- src/data_layer/universe_service.py: __init__ self._rest +
+  self._bulk_loaded; scan() ilk çağrıda fetch_all_contract_details()
+  + update_contract_sizes; hata → log warning, scan devam eder,
+  sonraki scan'de yeniden denenir.
+- Test: tests/unit/test_b3_5_universe_bulk_contract_size.py (4 PASS).
+- VM canlı doğrulandı: B3_5_BULK_CONTRACT_SIZES_LOADED n=1184.
+
+B3.5 Mod 2 stop-flag kapsamı (kapandı 2026-09-25):
+- H=C kilitli: stop-flag 5s micro-trigger loop'a piggyback (SLA ≤10s);
+  observation_state.observation_stop poll.
+- tests/shadow/runner.py: import poll_stop_flag; __init__
+  _observation_stopped; _poll_observation_stop metodu (async);
+  _handle_micro_trigger_entry helper (TRIGGER bloğu çıkarıldı).
+- Test: tests/unit/test_b3_5_stop_flag.py (6 PASS).
+- VM canlı doğrulandı (transition logu; entry skip).
+
+B3.5 Mod 2 inert mode kapsamı (kapandı 2026-09-26):
+- STORM turu (4 soru, 5 ajan): Q1=A (unanimity), Q2=B (unanimity),
+  Q3=A (%85.2), Q4=B (%85.2).
+- Q1=A: OBSERVATION_STOPPED emit noktası _poll_observation_stop.
+- Q2=B: OBSERVATION_STOPPED WARNING; PO onayıyla simetrik
+  OBSERVATION_RESUMED eklendi (her ikisi WARNING).
+- Q3=A: inert check mevcut _auth_middleware içinde, auth sonrası;
+  non-GET + stopped → 503.
+- Q4=B: last_transition_reason persistence + startup skip
+  (frozen schema uyumlu; ALTER yok).
+- GLM kaygı #3: inert modda /health 200 + status=observation_stopped.
+- GLM kaygı write ordering: last_transition_reason emit'ten SONRA.
+- src/alerting/event_catalog.py: OBSERVATION_STOPPED + OBSERVATION_RESUMED
+  + OBSERVATION_COMPLETED (WARNING) eklendi.
+- src/dashboard/app.py: middleware inert check.
+- src/dashboard/routes.py: health status override +
+  is_observation_stopped.
+- tests/shadow/runner.py: _poll_observation_stop async;
+  _emit_observation_transition; _sync_observation_state_on_startup;
+  run() başında startup sync.
+- Test: tests/unit/test_b3_5_inert_mode.py (10 PASS);
+  test_b3_5_stop_flag.py async fix; test_alerting_event_catalog.py
+  parametrize genişletme.
+- VM canlı doğrulandı: STOPPED + RESUMED transition; restart guard
+  (0 re-emit). Inert middleware canlı testi deferred (dashboard
+  ayrı süreç; 10 unit test kapsar).
+
+B3.5 Mod 2 clean_shutdown_marker kapsamı (kapandı 2026-09-26):
+- AD=A kilitli: startup'ta unclean yaz; normal çıkışta clean;
+  planned/unplanned ayrımı.
+- tests/shadow/runner.py: _sync_observation_state_on_startup +
+  _mark_clean_shutdown; run() başında helper; clean_exit bayrağı;
+  finally'de clean ise marker yaz.
+- Test: tests/unit/test_b3_5_shutdown_marker.py (6 PASS).
+- VM canlı doğrulandı: startup unclean; SIGTERM sonrası clean;
+  yeni startup prev_marker=clean.
+
+B3.5 Mod 2 auto-finalize kapsamı (kapandı 2026-09-26):
+- AE=A kilitli: target_days dolunca auto-finalize (END_OF_BACKTEST
+  exit'ler; inert mode; OBSERVATION_COMPLETED).
+- Varsayımlar (PO override edebilir): target_days duvar saati
+  (now - started_at); clock auto-start (started_at=0 → ilk tick now).
+- Q2=B ruhu: in-memory _observation_stopped DB yazımından ÖNCE set
+  edilir; sonraki poll prev==new görür, STOPPED emit etmez; yalnız
+  COMPLETED tek event.
+- tests/shadow/runner.py: __init__ _auto_finalized; startup sync;
+  _micro_trigger_loop içinde _check_auto_finalize çağrısı
+  (_poll_observation_stop'tan sonra); run() finally'de paper.finalize
+  guard (auto_finalize yaptıysa tekrar çağırma); _check_auto_finalize
+  metodu (target_ms hesabı + paper.finalize + OBSERVATION_COMPLETED).
+- Test: tests/unit/test_b3_5_auto_finalize.py (6 PASS).
+- VM canlı doğrulandı: B3_5_OBSERVATION_STARTED_AT_SET ms=1790370937201;
+  AUTO_FINALIZE_TRIGGER yok (60 gün dolmadı).
+
+Commit zinciri (B3.5 Mod 2 kalan):
+- 560afff: fix(b3.5): universe bulk contract-size fetch (SORU 1=B)
+- 9dec847: feat(b3.5): stop-flag poll + entry block (H=C)
+- 098190e: feat(b3.5): inert mode + OBSERVATION_STOPPED/RESUMED (AC=A)
+- f90bfff: feat(b3.5): clean_shutdown_marker (AD=A)
+- 2c311b5: feat(b3.5): auto-finalize on target_days (AE=A)
+Sonrası: docs(durum): B3.5 Mod 2 kapanış snapshot.
 
 CLI örnek kullanımı:
     # Single
@@ -462,7 +666,7 @@ CLI örnek kullanımı:
         --symbol BTC_USDT --data-quality-profile strict \
         --report should_fail.json
     # Shadow (B3.1 çok-sembol + rotation + B3.2 micro-trigger +
-    # B3.3 paper manager + B3.4 alert agent)
+    # B3.3 paper manager + B3.4 alert agent + B3.5 observation)
     python -m tests.shadow.runner --symbols BTC_USDT,SOL_USDT \
         --db data/mikov2.sqlite --enable-rotation
     # B3.5 rehearsal (manuel; PO callable'ları sağlar)
@@ -513,23 +717,18 @@ TÜM ALT FAZLAR KAPANDI (2026-09-22):
 - B2e.real: Gerçek çok sembol gate (S′) — veri birikimine bağlı.
 
 Commit politikası: PO kısıtı gereği B2e tek final commit. Yeni
-fazlarda (B3.1, B3.2, B3.3, B3.4, B3.5) yine tek commit.
+fazlarda (B3.1, B3.2, B3.3, B3.4) tek commit. B3.5 Mod 2 kalan
+turlar: PO isteğiyle 5 izole commit (her tur kendi kapsamı).
 
 9. SIRADAKİ FAZLAR
-B3.5 Mod 2 — kalan alt turlar (PO onayı 2026-09-23, Round 5 kapandı;
-T1..T6 + migration wiring + gözlem metrikleri kapandı 2026-09-25):
-- Rotasyon aktivasyonu: systemd ExecStart'a --enable-rotation eklenir
-  (B3.5-A=A); runner kodu değişmez. VM'de kolektör çok-sembol
-  (Top5 WS + Top10 watch) olarak çalışmaya başlar. Git push + VM
-  pull + systemd değişikliği birlikte yapılacak.
-- Gözlem metrikleri (M=B): KAPANDI (dashboard 6. panel +
-  /api/v2/observation). VM deploy git push + pull ile birlikte.
-- Inert mode (AC=A): GET-only allowlist; POST/PUT/DELETE blok;
-  /health status=observation_stopped; OBSERVATION_STOPPED tek emit.
-- Stop-flag (H=C): 5s micro-trigger loop'a piggyback (SLA ≤10s);
-  observation_state.observation_stop poll.
-- clean_shutdown_marker (AD=A); auto-finalize (AE=A);
-  OBSERVATION_DAILY_SUMMARY R satırı (U=A).
+B3.5 gözlem süresi (kod kapandı 2026-09-26):
+- 30 gün checkpoint: manuel walk-forward (B3.5-G=B); DURUM §7 kaydı.
+- 60 gün final: auto-finalize (AE=A) tarafından otomatik tetiklenir;
+  paper.finalize + OBSERVATION_COMPLETED.
+- Veri birikimine göre B2e.real gate ≥30g.
+- Süre boyunca üretilen datalar, işlemler, kârlılık, R-multiple,
+  win_rate, drawdown, sembol bazlı performans karşılıklı
+  değerlendirilir.
 - Canlı para ile işlem açmak YOK.
 - Yakalanan tüm sinyaller paper pozisyon olarak açılmış/kapanmış
   gibi not edilir (paper_positions + paper_events çok sembolde
@@ -537,46 +736,38 @@ T1..T6 + migration wiring + gözlem metrikleri kapandı 2026-09-25):
 - 30 gün checkpoint + 60 gün final (B3.5-B=B); B2e.real manuel
   tetik (B3.5-G=B); walk-forward environment = temp GCP instance
   from Z=B snapshot (B3.5-AG=B).
-- Alert: OBSERVATION_DAILY_SUMMARY additive R satırı + Telegram
-  route (B3.5-U=A); EXIT forward O=A; stop-flag C + inert mode V
-  + 5s piggyback X + 0600 perms W; clean_shutdown_marker AD;
-  auto-finalize AE; offline maintenance AF; restore test AH.
-- observation_state: B3.5-AI=A — wide fixed-schema + CHECK(id=1);
-  9 kilitli karar (H,K,T,R,AB,W,AD,AE,S) tek tabloda; NOT NULL
-  DEFAULT; INSERT OR IGNORE (id=1); OR REPLACE YASAK; mid-phase
-  ALTER TABLE YASAK. Detay §11. UYGULANDI (T1..T5).
-- Rehearsal: B3.5-AJ=B — iki katmanlı hard/soft go/no-go. Detay §11.
-  UYGULANDI (T6); T7 checklist İPTAL.
-- B2e.real (S′ gate, ≥30 gün veri) B3.5 sürecinde paralel.
-- Süre boyunca üretilen datalar, işlemler, kârlılık, R-multiple,
-  win_rate, drawdown, sembol bazlı performans karşılıklı
-  değerlendirilir.
-B3.5 sonunda: gerçek para kararı (ayrı karar; SORU SS=C).
+
+B3.5+1 / B4.0 (canlı+nakit kapısı):
+- Gerçek para kararı (SORU SS=C).
+- U=A OBSERVATION_DAILY_SUMMARY (rapor ihtiyacı doğduğunda).
+- Telegram aktivasyonu (canlı+nakit fazında; SADECE pozisyon
+  aç/kapa mesajı).
+- Dashboard VM'de aktif edilirse inert middleware canlı doğrulaması.
+- STORM §5 sandbox eklentisi (PO onayı verilmedi; kayıt).
+- Yeni YAMA'lar (369+ açık).
+- B2e.real (S′ gate, ≥30 gün veri) paralel.
 
 10. PROD İÇİN SONRAKİ ADIMLAR (B3)
 SORU SS (C) sırası:
-B3.1 — Çok-sembol kolektör: Top5 WS bağlı (tam depth + OHLCV +
-ticker), Top10 watch. Universe scanner mevcut (Top20); rotasyonda
-WS abonelik güncellenir. Hysteresis 5m/flap 3 yumuşatıcı. e2-micro
-CPU/RAM/DB ilk hafta izlenir; aşılırsa Top5→Top4 daralması S′ ≥4
-koşuluyla uyumlu. (KAPANDI 2026-09-22.)
-B3.2 — Micro-trigger canlı (WS tick -> detector -> signal ->
-strategy). (KAPANDI 2026-09-23.)
-B3.3 — Position manager paper (canlı canlı paper trading).
-(KAPANDI 2026-09-23.)
+B3.1 — Çok-sembol kolektör. (KAPANDI 2026-09-22.)
+B3.2 — Micro-trigger canlı. (KAPANDI 2026-09-23.)
+B3.3 — Position manager paper. (KAPANDI 2026-09-23.)
 B3.4 — Alert entegrasyonu (Telegram/Discord). Mod 1 plan KAPANDI
 (2026-09-23); Mod 2 kod KAPANDI (2026-09-23).
 B3.5 — Çok sembol paper gözlem + gerçek para öncesi 1-2 ay
 değerlendirme. Mod 1 plan KAPANDI; Round 5 KAPANDI (AI=A, AJ=B);
 Mod 2 T1..T6 KAPANDI (2026-09-24); migration wiring + gözlem
-metrikleri KAPANDI (2026-09-25); kalan alt turlar SIRADAKİ.
+metrikleri KAPANDI (2026-09-25); **B3.5 Mod 2 kalan turlar
+(rotasyon + bulk fix + stop-flag + inert mode + clean_shutdown +
+auto-finalize) KAPANDI (2026-09-25/26). U=A DEFERRED (PO).**
 
 11. KİLİTLİ KARARLAR (Kümülatif)
 Git/checkpoint:
 Güvenilmeyen commit'ler local'de reset, remote'a force-push ile
 silinir. Önceki checkpoint: 7fb827848aee38897fcea9616d4ea898c294089a
 (REV9 DURUM + BAĞLAM, 2026-09-17).
-Bu oturum checkpoint'i: <COMMIT_HASH> (B3.5 Mod 2 kapanışında).
+Bu oturumun son commit'i: 2c311b5 (auto-finalize); sonrası
+docs(durum) commit'i.
 Protokol = yöntem, DURUM = içerik. Devir sırasında sadece bu dosya
 güncellenir; PROTOKOL.md sabit kalır.
 B2d çoklu config: --config-a / --config-b.
@@ -880,8 +1071,10 @@ STORM PROTOKOLÜ (yürürlükte):
 Çoklu bağımsız LLM ile karar doğrulama uygulanır. SSOT:
 STORM-PROTOKOL.md. PROTOKOL.md §1.7 atıf. Ağırlık tablosu:
 asistan=1.25, GLM-5.3=2.0, Qwen3.8=1.5, GPT-5/Gemini-2.5-pro/
-Muse Spark 1.1=1.0. Karar eşiği ≥%75 ağırlık → kilit. Asistan
-oy hakkı tabloda; agregasyona dahildir (STORM §2).
+Muse Spark 1.1=1.0. Grok 4.5 (yeni ajan, 2026-09-25): 1.00 baseline.
+Rakuten research_assistant: değerlendirme dışı (PO 2026-09-26;
+şema ihlali + bağlam hatası). Karar eşiği ≥%75 ağırlık → kilit.
+Asistan oy hakkı tabloda; agregasyona dahildir (STORM §2).
 Tek ajan azınlıkta kalırsa ve yeni sandbox kanıt sunarsa
 adversarial appeal opsiyonu (AG vakası emsal).
 
@@ -978,7 +1171,57 @@ B3.5 MOD 2 EK KİLİTLİ KARARLAR (2026-09-25):
                     oluşmazdı. Runner kodu tek noktada kilitli.
   DASHBOARD PORT    DashboardConfig.port = 10001 tek kaynak; çağıran
                     taraf override etmez. VM systemd satırı B3.5
-                    kapanışında güncellenecek.
+                    kapanışında güncellenecek → §6.7 düzeltildi
+                    (--port argümanı zaten YOK).
+
+B3.5 MOD 2 KALAN TURLAR KİLİTLİ KARARLAR (2026-09-25/26):
+  SORU 1=B    Bulk contract-size fetch UniverseService.scan() ilk
+              çağrı; DI öncelikli; hata → sonraki scan'de retry.
+              UYGULANDI.
+  Q1=A        OBSERVATION_STOPPED emit noktası _poll_observation_stop.
+              STORM unanimity (6.75/6.75). UYGULANDI.
+  Q2=B        OBSERVATION_STOPPED WARNING. STORM unanimity.
+              PO onayıyla simetrik OBSERVATION_RESUMED eklendi
+              (her ikisi WARNING; W=A kilidi uyumu GLM'in kritik
+              bulgusu). UYGULANDI.
+  Q3=A        Inert check mevcut _auth_middleware içinde, auth
+              sonrası; tüm current + future non-GET endpoint'leri
+              otomatik kapsar. STORM %85.2 (GLM sandbox). UYGULANDI.
+  Q4=B        last_transition_reason persistence + startup skip
+              (frozen schema uyumlu; ALTER yok). STORM %85.2
+              (GLM sandbox 5 senaryo). UYGULANDI.
+  GLM kaygı #3  inert modda /health 200 + status=observation_stopped
+              (503 değil). UYGULANDI.
+  GLM kaygı write ordering  last_transition_reason emit'ten SONRA
+              yazılır. UYGULANDI.
+  U=A         DEFERRED (PO 2026-09-26). Gerekçe: dashboard
+              görünürlüğü yeterli; rapor ihtiyacı doğduğunda
+              B3.5+1/B4.x.
+  Telegram    PO 2026-09-26: canlı+nakit öncesi yok; canlı fazda
+              SADECE pozisyon aç/kapa.
+
+STORM TURU KAYDI (B3.5 Mod 2 / inert mode; 2026-09-25):
+- 4 soru: Q1 emit konumu, Q2 severity, Q3 middleware, Q4 restart
+  guard.
+- 5 ajan katıldı: Gemini 2.5 Pro (1.00), Qwen 3.8 (1.50),
+  Grok 4.5 (1.00, yeni), GLM-5.3 (2.00), Asistan (1.25).
+- Rakuten research_assistant: şema ihlali + bağlam hatası → PO
+  değerlendirme dışı bıraktı (2026-09-26).
+- Sonuçlar: Q1=A (unanimity), Q2=B (unanimity), Q3=A (%85.2),
+  Q4=B (%85.2).
+- Minority kayıtları: Gemini Q3 (B), Grok Q4 (A).
+- Grok 4.5 kalıcı ağırlık: 1.00 baseline.
+- GLM 2.00 ve Qwen 1.50 değerleri bu turda hak edildi; kalibrasyon
+  değişikliği yok.
+- STORM §1.8 Sandbox-diversity annotation (PO onaylı 2026-09-26;
+  STORM-PROTOKOL.md'ye eklendi): sandbox-testable sorularda yalnız
+  code_review/logical_reasoning sunan ajan sentezde
+  "evidence-diversity-incomplete" olarak anotlanır; cevap geçerli
+  kalır, anotasyon kalibrasyon sinyalidir.
+- STORM §1.4 düzeltmesi (PO onaylı 2026-09-26): 4-backtick blok ilk
+  satırı `#json` marker (PROTOKOL §7.5.4 ile uyumlu; eski "no
+  language marker" ifadesi kaldırıldı).
+- STORM §2 weight table: Grok 4.5 (xAI) 1.00 eklendi.
 
 PROTOKOL REFACTOR KİLİTLİ KARARLAR (2026-09-25):
   SEGMENT MODELİ    "Mod 1 / Mod 2" kaldırıldı. Mesaj = sıralı
@@ -994,8 +1237,7 @@ PROTOKOL REFACTOR KİLİTLİ KARARLAR (2026-09-25):
   DELIVERY SIRASI   §7.6.1: src → tests → pytest satırı.
   DOSYA BAŞLIĞI     §7.6.2: bir dosya = bir başlık; çoklu değişiklik
                     1-2-3 numaralı.
-  KOD YORUMLARI     §1.8: kod yorumları TÜRKÇE (önceki metin yanlış
-                    çeviriyle İngilizce diyordu).
+  KOD YORUMLARI     §1.8: kod yorumları TÜRKÇE.
   SORU NUMARASI     §5.1: Q1, Q2, Q3 (harf değil).
   PASS FARKI        §7.7.2: yeni test varsa fark tam N; ±2 yalnız
                     yeni test yoksa.
@@ -1022,7 +1264,8 @@ uygulandı.
 12. DOSYA KONUMLARI
 docs/DURUM.md — bu dosya.
 docs/PROTOKOL.md — yöntem dökümanı (sabit; evrensel). Segment
-modeli yürürlükte (Mod kaldırıldı; A/B/C/D/E).
+modeli yürürlükte (Mod kaldırıldı; A/B/C/D/E). §7.5.1.1 +
+§7.5.1.2 yürürlükte.
 docs/STORM-PROTOKOL.md — çoklu LLM karar doğrulama (SSOT);
 PROTOKOL.md §1.7 atıf.
 docs/MikoV2-AnaYasa-REV5.md — 116 YAMA, kod kuralları (ANAYASA
@@ -1178,7 +1421,37 @@ docs/PROTOKOL.md (DEĞİŞTİ) — segment modeli; §1.5.6 Content
   §7.3 BLOCK B + BLOCK C; §7.6.1 teslim içi sıra; §7.6.2 dosya
   başlığı; §0.8 kod yorumları TÜRKÇE; §5.1 Q1/Q2/Q3; §7.7.2
   PASS farkı = tam N; §9 sycophancy tanımı; renumber §0 → §1.
+  §7.5.1.1 Shell interaction; §7.5.1.2 Waiting shell commands.
 docs/STORM-PROTOKOL.md (DEĞİŞTİ) — §0.7 → §1.7 dış atıf.
+
+B3.5 Mod 2 kalan turlar değişen/yeni (2026-09-25/26):
+src/data_layer/metrics_fetcher.py (DEĞİŞTİ) — update_contract_sizes
+  metodu (B3.5-SORU 1=B).
+src/data_layer/universe_service.py (DEĞİŞTİ) — self._rest +
+  self._bulk_loaded; scan() ilk çağrıda bulk fetch + update_contract_sizes.
+src/alerting/event_catalog.py (DEĞİŞTİ) — OBSERVATION_STOPPED +
+  OBSERVATION_RESUMED + OBSERVATION_COMPLETED (WARNING).
+src/dashboard/app.py (DEĞİŞTİ) — inert check middleware (auth
+  sonrası; non-GET 503).
+src/dashboard/routes.py (DEĞİŞTİ) — health status override
+  (observation_stopped); is_observation_stopped metodu.
+tests/shadow/runner.py (DEĞİŞTİ) — _poll_observation_stop (async) +
+  _emit_observation_transition + _sync_observation_state_on_startup
+  + _mark_clean_shutdown + _check_auto_finalize +
+  _handle_micro_trigger_entry helper + clean_exit flag +
+  _auto_finalized in-memory.
+tests/unit/test_b3_5_universe_bulk_contract_size.py (YENİ, 4 test).
+tests/unit/test_b3_5_stop_flag.py (YENİ, 6 test).
+tests/unit/test_b3_5_inert_mode.py (YENİ, 10 test).
+tests/unit/test_b3_5_shutdown_marker.py (YENİ, 6 test).
+tests/unit/test_b3_5_auto_finalize.py (YENİ, 6 test).
+tests/unit/test_alerting_event_catalog.py (DEĞİŞTİ) — +3 parametrize
+  satırı.
+
+VM systemd:
+/etc/systemd/system/miko-collector.service.d/override.conf (YENİ) —
+  ExecStart override; --enable-rotation ekler. Kanonik unit
+  dokunulmadı.
 
 13. YENİ SOHBET NASIL BAŞLAR
 Verilecek dosyalar:
@@ -1189,12 +1462,15 @@ MikoV2-AnaYasa-REV5.md (§0 systemd EnvironmentFile 0600)
 MikoV2-Proje-Tum-Moduller-REV5.md
 
 İlk mesaj:
-"MikoV2 projesine devam ediyoruz. B3.5 Mod 2 T1..T6 + migration
-wiring + gözlem metrikleri (M=B) kapandı (2026-09-25). T7 iptal
-(PO kararı). B3.5 Mod 2 kalan alt turlar sıradaki.
+"MikoV2 projesine devam ediyoruz. B3.5 Mod 2 kalan turlar
+(rotasyon aktivasyonu + bulk contract-size + stop-flag + inert mode
++ clean_shutdown_marker + auto-finalize) kapandı (2026-09-26).
+U=A OBSERVATION_DAILY_SUMMARY PO kararıyla deferred; Telegram
+canlı+nakit fazına ertelendi. B3.5 kod tarafı bitti; gözlem süresi
+(30g/60g) doğal akışta devam ediyor.
 
-İlk tur: rotasyon aktivasyonu teslimi için hazırla (systemd
-ExecStart --enable-rotation; runner kodu değişmez)."
+İlk tur: B3.5 kapanış commit kararı (5 izole commit mevcut;
+squash gerekir mi?) veya B3.5+1 / B4.0 planlama."
 
 14. UNFROZEN BEYANI
 FROZEN YOK.
