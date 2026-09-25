@@ -45,6 +45,12 @@ EVENT_SEVERITY: Final[dict] = {
     "TOP5_DARALMA_ALERT": SEVERITY_WARNING,
     "TRADE_REJECTED_FEE_DRAG": SEVERITY_WARNING,
     "DUST_POSITION_REMAINING": SEVERITY_WARNING,
+    # B3.5-AC=A: inert mode transitionlari (Q2=B simetri).
+    # STOPPED (False->True) ve RESUMED (True->False) her ikisi de
+    # operatore Telegram/Discord uzerinden ulasmali (W=A kilidi:
+    # "her flag transition WARNING").
+    "OBSERVATION_STOPPED": SEVERITY_WARNING,
+    "OBSERVATION_RESUMED": SEVERITY_WARNING,
     # INFO
     "SWEEP": SEVERITY_INFO,
     "MSS": SEVERITY_INFO,

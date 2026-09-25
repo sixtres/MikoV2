@@ -47,7 +47,7 @@ def _make_runner(tmp_path):
 def test_poll_sets_stopped_true(tmp_path):
     runner = _make_runner(tmp_path)
     set_stop_flag(runner._conn, True)
-    runner._poll_observation_stop()
+    asyncio.run(runner._poll_observation_stop())
     assert runner._observation_stopped is True
     runner._conn.close()
 
@@ -55,7 +55,7 @@ def test_poll_sets_stopped_true(tmp_path):
 def test_poll_sets_stopped_false(tmp_path):
     runner = _make_runner(tmp_path)
     set_stop_flag(runner._conn, False)
-    runner._poll_observation_stop()
+    asyncio.run(runner._poll_observation_stop())
     assert runner._observation_stopped is False
     runner._conn.close()
 
@@ -64,7 +64,7 @@ def test_poll_retains_previous_on_error(tmp_path):
     runner = _make_runner(tmp_path)
     runner._observation_stopped = True
     runner._conn.close()  # sonraki poll'da ProgrammingError beklenir
-    runner._poll_observation_stop()
+    asyncio.run(runner._poll_observation_stop())
     assert runner._observation_stopped is True  # onceki state korundu
 
 
@@ -100,7 +100,7 @@ def test_handle_entry_when_stopped(tmp_path):
 def test_flag_flip_reflected(tmp_path):
     runner = _make_runner(tmp_path)
     set_stop_flag(runner._conn, False)
-    runner._poll_observation_stop()
+    asyncio.run(runner._poll_observation_stop())
     asyncio.run(
         runner._handle_micro_trigger_entry(
             "BTC_USDT", Direction.LONG, 1.0, 1
@@ -109,12 +109,17 @@ def test_flag_flip_reflected(tmp_path):
     assert len(runner._paper.entries) == 1
 
     set_stop_flag(runner._conn, True)
-    runner._poll_observation_stop()
+    asyncio.run(runner._poll_observation_stop())
     asyncio.run(
         runner._handle_micro_trigger_entry(
             "BTC_USDT", Direction.LONG, 1.0, 2
         )
     )
     assert len(runner._paper.entries) == 1  # ikinci entry bloklandi
-    assert len(runner._alert_agent.emits) == 1
+    # AC=A sonrasi poll OBSERVATION_STOPPED de emit eder; yalniz ENTRY
+    # sayilir (testin niyeti: yeni entry emit edilmedi).
+    entry_emits = [
+        e for e in runner._alert_agent.emits if e[0] == "ENTRY"
+    ]
+    assert len(entry_emits) == 1
     runner._conn.close()

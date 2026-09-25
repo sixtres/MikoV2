@@ -86,7 +86,11 @@ from src.alerting.agent import (
     config_from_env,
 )
 from src.observation import migrate_observation
-from src.observation.state import poll_stop_flag
+from src.observation.state import (
+    poll_stop_flag,
+    load_state as load_observation_state,
+    update_state as update_observation_state,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1094,18 +1098,73 @@ class ShadowRunner:
                     self._shutdown_event.set()
                     return
 
-    def _poll_observation_stop(self) -> None:
-        """B3.5-H=C stop-flag watchdog poll.
+    async def _poll_observation_stop(self) -> None:
+        """B3.5-H=C + AC=A stop-flag poll + transition emit.
 
         5s micro-trigger loop'a piggyback; SLA <=10s (5s poll x 2).
         Exception halinde onceki state korunur; observation cokme yok.
+        Q1=A: emit noktasi burasi (tek process, tek nokta).
         """
         if self._conn is None:
             return
         try:
-            self._observation_stopped = poll_stop_flag(self._conn)
+            new_val = poll_stop_flag(self._conn)
         except Exception as e:
             logger.warning("observation stop-flag poll failed: %s", e)
+            return
+        prev = self._observation_stopped
+        self._observation_stopped = new_val
+        if prev == new_val:
+            return
+        await self._emit_observation_transition(new_val)
+
+    async def _emit_observation_transition(self, stopped: bool) -> None:
+        """B3.5-AC=A transition emit + persist.
+
+        Q1=A: transition noktasi burasi.
+        Q2=B: OBSERVATION_STOPPED / OBSERVATION_RESUMED WARNING (batch).
+        Q4=B: last_transition_reason persistence (frozen schema).
+        Ordering (GLM kaygi): emit -> sonra DB write. Aksi halde push
+        basarisiz + restart tek bildirim kaybeder.
+        """
+        if self._conn is None:
+            return
+        event_type = (
+            "OBSERVATION_STOPPED" if stopped else "OBSERVATION_RESUMED"
+        )
+        now_ms = int(time.time() * 1000)
+        # 1) Emit (once)
+        if self._alert_agent is not None:
+            try:
+                await self._alert_agent.emit(
+                    event_type,
+                    {
+                        "symbol": "OBSERVATION",
+                        "reason": event_type,
+                        "source": "RUNNER",
+                        "ts_ms": now_ms,
+                        "source_seq": now_ms,
+                    },
+                )
+            except Exception as e:
+                logger.warning(
+                    "observation transition emit failed: %s", e
+                )
+        # 2) Persist (sonra)
+        try:
+            update_observation_state(
+                self._conn,
+                last_transition_ms=now_ms,
+                last_transition_reason=event_type,
+            )
+        except Exception as e:
+            logger.warning(
+                "observation transition persist failed: %s", e
+            )
+        logger.warning(
+            "B3_5_OBSERVATION_TRANSITION type=%s stopped=%s",
+            event_type, stopped,
+        )
 
     async def _handle_micro_trigger_entry(
         self,
@@ -1186,8 +1245,8 @@ class ShadowRunner:
                 pass
             now_ms = int(time.time() * 1000)
             now_mono = time.monotonic()
-            # B3.5-H=C: 5s poll (piggyback); SLA <=10s
-            self._poll_observation_stop()
+            # B3.5-H=C + AC=A: 5s poll (piggyback); SLA <=10s
+            await self._poll_observation_stop()
             for symbol in sorted(self.symbols):
                 if symbol not in self._micro_triggers:
                     continue
@@ -1299,6 +1358,23 @@ class ShadowRunner:
     async def run(self) -> dict:
         timeout = aiohttp.ClientTimeout(total=5.0)
         self._setup_db()
+
+        # B3.5-AC=A: startup observation_state sync (Q4=B restart guard).
+        # Flag True iken restart, in-memory True set ederek ilk poll'da
+        # yanlis transition emit'ini engeller (prev==new).
+        if self._conn is not None:
+            try:
+                _st = load_observation_state(self._conn)
+                self._observation_stopped = bool(_st.observation_stop)
+                logger.warning(
+                    "B3_5_STARTUP_OBS_STATE stopped=%s reason=%s",
+                    self._observation_stopped,
+                    _st.last_transition_reason,
+                )
+            except Exception as e:
+                logger.warning(
+                    "startup obs state sync failed: %s", e
+                )
 
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:

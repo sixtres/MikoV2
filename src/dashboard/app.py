@@ -146,6 +146,21 @@ class DashboardApp:
             return web.json_response(
                 {"error": "unauthorized"}, status=401
             )
+        # B3.5-AC=A: inert mode GET-only allowlist (Q3=A). Auth SONRASI;
+        # 401 once, sonra 503 (GLM sandbox testi). Tum current ve future
+        # non-GET endpoint'leri otomatik kapsar.
+        # NOT: skip-list prefixleri ('/', '/static/*', '/api/v2/sse')
+        # yalniz GET-only kalmalidir; oraya non-GET route eklenmesi
+        # inert bloku bypass eder (AC=A testi ile korunur).
+        if request.method != "GET":
+            if self._routes.is_observation_stopped():
+                return web.json_response(
+                    {
+                        "error": "observation_stopped",
+                        "status": "observation_stopped",
+                    },
+                    status=503,
+                )
         return await handler(request)
 
     # --------------------------------------------------------------- handlers

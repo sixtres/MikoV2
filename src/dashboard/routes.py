@@ -83,6 +83,20 @@ class DashboardRoutes:
                 "uptime_s": round(uptime_s, 1),
                 "alive_pct": 1.0,
             }
+            # B3.5-AC=A: inert mode -> 200 + status=observation_stopped.
+            # 503 gercek hatalar icin ayrilir; veri pipeline devam ettigi
+            # icin alive_pct=1.0 anlamli kalir (GLM kaygi #3).
+            if self._conn is not None:
+                try:
+                    from ..observation.state import (
+                        poll_stop_flag as _poll,
+                    )
+                    if _poll(self._conn):
+                        body["status"] = "observation_stopped"
+                except Exception as e:
+                    logger.warning(
+                        "health observation_stop poll failed: %s", e
+                    )
             return 200, body
         except Exception as e:
             logger.warning("health failed: %s", e)
@@ -418,6 +432,22 @@ class DashboardRoutes:
             return {"ok": False, "error": str(e)}
 
     # --------------------------------------------------------------- observation
+
+    def is_observation_stopped(self) -> bool:
+        """B3.5-AC=A: inert mode check (middleware icin sync tek SELECT).
+
+        Fail-open on DB read error (paper-only phase); B4.0'da
+        fail-closed yeniden degerlendirilecek. `_conn` None ise
+        observation katmani yok -> inert mode yok (False).
+        """
+        if self._conn is None:
+            return False
+        try:
+            from ..observation.state import poll_stop_flag as _poll
+            return bool(_poll(self._conn))
+        except Exception as e:
+            logger.warning("inert check failed: %s", e)
+            return False
 
     async def observation(self) -> dict:
         """B3.5 M=B: observation_state tek-satir okuma (salt-okuma).

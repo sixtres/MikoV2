@@ -38,6 +38,9 @@ def test_critical_events(event_type):
     "TOP5_DARALMA_ALERT",
     "TRADE_REJECTED_FEE_DRAG",
     "DUST_POSITION_REMAINING",
+    # B3.5-AC=A: inert mode transition simetrisi (Q2=B).
+    "OBSERVATION_STOPPED",
+    "OBSERVATION_RESUMED",
 ])
 def test_warning_events(event_type):
     assert get_severity(event_type) == SEVERITY_WARNING
