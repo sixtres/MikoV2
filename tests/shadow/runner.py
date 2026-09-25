@@ -86,6 +86,7 @@ from src.alerting.agent import (
     config_from_env,
 )
 from src.observation import migrate_observation
+from src.observation.state import poll_stop_flag
 
 logging.basicConfig(
     level=logging.INFO,
@@ -234,6 +235,10 @@ class ShadowRunner:
         self._last_price: dict[str, float] = {}
         self._last_exchange_ts: dict[str, int] = {}
         self._mt_loop_task: asyncio.Task | None = None
+
+        # B3.5-H=C: stop-flag internal state (observation_state.observation_stop).
+        # 5s micro-trigger loop'a piggyback; SLA <=10s. Ilk poll'a kadar False.
+        self._observation_stopped: bool = False
 
         # Initialize per-symbol state for initial symbols
         for sym in self.symbols:
@@ -1089,6 +1094,76 @@ class ShadowRunner:
                     self._shutdown_event.set()
                     return
 
+    def _poll_observation_stop(self) -> None:
+        """B3.5-H=C stop-flag watchdog poll.
+
+        5s micro-trigger loop'a piggyback; SLA <=10s (5s poll x 2).
+        Exception halinde onceki state korunur; observation cokme yok.
+        """
+        if self._conn is None:
+            return
+        try:
+            self._observation_stopped = poll_stop_flag(self._conn)
+        except Exception as e:
+            logger.warning("observation stop-flag poll failed: %s", e)
+
+    async def _handle_micro_trigger_entry(
+        self,
+        symbol: str,
+        direction: Direction,
+        price: float,
+        ts_ms: int,
+    ) -> None:
+        """B3.2 TRIGGER handling: log entry signal + paper on_entry + alert.
+
+        B3.5-H=C: stop-flag True ise yeni entry acilmaz; gozlem devam eder
+        (entry signal log yine atilir; paper on_entry + ENTRY alert skip).
+        """
+        self._log_entry_signal(
+            source="MICRO_TRIGGER",
+            symbol=symbol,
+            direction=direction,
+            price=price,
+            ts_ms=ts_ms,
+            reason="micro_trigger",
+        )
+        if self._observation_stopped:
+            logger.warning(
+                "ENTRY_SKIPPED_STOP_FLAG symbol=%s direction=%s",
+                symbol,
+                direction.value,
+            )
+            return
+        # B3.3: paper entry (Direction -> str for PaperPositionManager API)
+        if self._paper is not None:
+            try:
+                await self._paper.on_entry(
+                    symbol=symbol,
+                    direction=direction.value,
+                    signal_ts_ms=ts_ms,
+                    last_price=price,
+                )
+            except Exception as e:
+                logger.warning(
+                    "paper on_entry failed symbol=%s: %s", symbol, e
+                )
+        # B3.4: ENTRY event (WARNING batch routing)
+        if self._alert_agent is not None:
+            try:
+                await self._alert_agent.emit(
+                    "ENTRY",
+                    {
+                        "symbol": symbol,
+                        "direction": direction.value,
+                        "price": price,
+                        "ts_ms": ts_ms,
+                        "source": "MICRO_TRIGGER",
+                        "source_seq": ts_ms,
+                    },
+                )
+            except Exception as e:
+                logger.warning("alert emit ENTRY failed: %s", e)
+
     async def _micro_trigger_loop(self) -> None:
         """B3.2: evaluate MicroTrigger every timer_sleep_ms (5s).
 
@@ -1097,6 +1172,8 @@ class ShadowRunner:
 
         B3.3: TRIGGER anında PaperPositionManager.on_entry çağrılır;
         current_position_qty paper manager'dan beslenir (A.3).
+
+        B3.5-H=C: her turun basinda stop-flag poll (5s piggyback).
         """
         while not self._shutdown_event.is_set():
             try:
@@ -1109,6 +1186,8 @@ class ShadowRunner:
                 pass
             now_ms = int(time.time() * 1000)
             now_mono = time.monotonic()
+            # B3.5-H=C: 5s poll (piggyback); SLA <=10s
+            self._poll_observation_stop()
             for symbol in sorted(self.symbols):
                 if symbol not in self._micro_triggers:
                     continue
@@ -1178,48 +1257,9 @@ class ShadowRunner:
                     direction = self._determine_direction(symbol, recent)
                     if direction is not None:
                         price = self._last_price.get(symbol, 0.0)
-                        self._log_entry_signal(
-                            source="MICRO_TRIGGER",
-                            symbol=symbol,
-                            direction=direction,
-                            price=price,
-                            ts_ms=now_ms,
-                            reason="micro_trigger",
+                        await self._handle_micro_trigger_entry(
+                            symbol, direction, price, now_ms
                         )
-                        # B3.3: paper entry (Direction -> str for
-                        # PaperPositionManager API)
-                        if self._paper is not None:
-                            try:
-                                await self._paper.on_entry(
-                                    symbol=symbol,
-                                    direction=direction.value,
-                                    signal_ts_ms=now_ms,
-                                    last_price=price,
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    "paper on_entry failed symbol=%s: %s",
-                                    symbol,
-                                    e,
-                                )
-                        # B3.4: ENTRY event (WARNING batch routing)
-                        if self._alert_agent is not None:
-                            try:
-                                await self._alert_agent.emit(
-                                    "ENTRY",
-                                    {
-                                        "symbol": symbol,
-                                        "direction": direction.value,
-                                        "price": price,
-                                        "ts_ms": now_ms,
-                                        "source": "MICRO_TRIGGER",
-                                        "source_seq": now_ms,
-                                    },
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    "alert emit ENTRY failed: %s", e
-                                )
                     self._micro_triggers[symbol]._reset_to_idle(symbol)
                     self._last_mt_state[symbol] = MicroTriggerState.IDLE
                 else:
