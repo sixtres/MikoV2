@@ -55,6 +55,16 @@ class BulkMetricsFetcher:
         # §6.2: emtia/hisse token exclude (DI ile gelir; default bos)
         self._excluded = excluded_symbols
 
+    def update_contract_sizes(self, sizes: dict[str, float]) -> None:
+        """B3.5-SORU 1=B: bulk fetch sonrası eksik anahtarları doldur.
+
+        DI ile gelen değerler öncelikli; mevcut anahtarlar ezilmez.
+        Caller intent kazanır (UniverseService DI + bulk merge).
+        """
+        for sym, cs in sizes.items():
+            if sym not in self._contract_sizes:
+                self._contract_sizes[sym] = cs
+
     @staticmethod
     def _spread_bps(bid: float, ask: float) -> float:
         if bid <= 0 or ask <= 0:

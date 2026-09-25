@@ -151,9 +151,28 @@ class UniverseService:
         self._quarantine_until_ms: dict[str, int] = {}
         self._quarantine_level: dict[str, int] = {}
 
+        # B3.5-SORU 1=B: bulk contract-size fetch (ilk scan'de bir kez).
+        # DI degerleri oncelikli; fetcher mevcut anahtarlari ezmez.
+        self._rest = rest
+        self._bulk_loaded: bool = False
+
     # ------------------------------------------------------------ fetcher
 
     async def scan(self) -> ScanResult:
+        # B3.5-SORU 1=B: ilk cagride bir kez bulk contract-size fetch.
+        # Hata olursa scan devam eder; sonraki scan'de yeniden denenir.
+        if not self._bulk_loaded:
+            try:
+                bulk = await self._rest.fetch_all_contract_details()
+                self._fetcher.update_contract_sizes(bulk)
+                self._bulk_loaded = True
+                logger.warning(
+                    "B3_5_BULK_CONTRACT_SIZES_LOADED n=%d", len(bulk)
+                )
+            except Exception as e:
+                logger.warning(
+                    "B3_5_BULK_CONTRACT_SIZES_FAILED err=%s", e
+                )
         ranked = await self._fetcher.fetch_and_rank()
         ordered: list[str] = list(self._always)
         for r in ranked:
