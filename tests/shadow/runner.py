@@ -1166,6 +1166,64 @@ class ShadowRunner:
             event_type, stopped,
         )
 
+    def _sync_observation_state_on_startup(self) -> None:
+        """B3.5-AC=A + AD=A: startup observation_state sync.
+
+        Onceki marker'i logla (planned/unplanned ayrimi), sonra
+        'unclean' yaz — surec calisirken beklenmedik cikis olursa
+        bir sonraki startup bunu yakalar.
+        """
+        if self._conn is None:
+            return
+        try:
+            st = load_observation_state(self._conn)
+        except Exception as e:
+            logger.warning("startup obs state read failed: %s", e)
+            return
+        self._observation_stopped = bool(st.observation_stop)
+        prev_marker = st.clean_shutdown_marker
+        if prev_marker == "clean":
+            logger.warning("B3_5_PREV_SHUTDOWN clean (planned)")
+        elif prev_marker == "unclean":
+            logger.warning(
+                "B3_5_PREV_SHUTDOWN unclean (kill -9/OOM/crash?)"
+            )
+        else:
+            logger.warning(
+                "B3_5_PREV_SHUTDOWN unknown marker=%r (first run?)",
+                prev_marker,
+            )
+        logger.warning(
+            "B3_5_STARTUP_OBS_STATE stopped=%s reason=%s prev_marker=%s",
+            self._observation_stopped,
+            st.last_transition_reason,
+            prev_marker,
+        )
+        # B3.5-AD=A: su anda calisiyoruz; clean cikis olursa 'clean'
+        # yazilacak, aksi halde 'unclean' kalir.
+        try:
+            update_observation_state(
+                self._conn,
+                clean_shutdown_marker="unclean",
+                clean_shutdown_marker_ms=int(time.time() * 1000),
+            )
+        except Exception as e:
+            logger.warning("startup marker write failed: %s", e)
+
+    def _mark_clean_shutdown(self) -> None:
+        """B3.5-AD=A: normal cikis sonrasi clean marker yaz."""
+        if self._conn is None:
+            return
+        try:
+            update_observation_state(
+                self._conn,
+                clean_shutdown_marker="clean",
+                clean_shutdown_marker_ms=int(time.time() * 1000),
+            )
+            logger.warning("B3_5_CLEAN_SHUTDOWN_MARKER_WRITTEN")
+        except Exception as e:
+            logger.warning("clean shutdown marker write failed: %s", e)
+
     async def _handle_micro_trigger_entry(
         self,
         symbol: str,
@@ -1359,22 +1417,9 @@ class ShadowRunner:
         timeout = aiohttp.ClientTimeout(total=5.0)
         self._setup_db()
 
-        # B3.5-AC=A: startup observation_state sync (Q4=B restart guard).
-        # Flag True iken restart, in-memory True set ederek ilk poll'da
-        # yanlis transition emit'ini engeller (prev==new).
-        if self._conn is not None:
-            try:
-                _st = load_observation_state(self._conn)
-                self._observation_stopped = bool(_st.observation_stop)
-                logger.warning(
-                    "B3_5_STARTUP_OBS_STATE stopped=%s reason=%s",
-                    self._observation_stopped,
-                    _st.last_transition_reason,
-                )
-            except Exception as e:
-                logger.warning(
-                    "startup obs state sync failed: %s", e
-                )
+        # B3.5-AC=A + AD=A: startup observation_state sync.
+        self._sync_observation_state_on_startup()
+        clean_exit = False
 
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -1532,7 +1577,13 @@ class ShadowRunner:
                     await self._flush_snapshot()
                     if self.ws is not None:
                         await self.ws.close()
+            clean_exit = True
         finally:
+            # B3.5-AD=A: clean shutdown marker (yalniz normal cikis).
+            # Exception veya kill -9 durumunda marker 'unclean' kalir;
+            # sonraki startup planned/unplanned ayrimi yapar.
+            if clean_exit:
+                self._mark_clean_shutdown()
             # B3.3-N4: paper pozisyonları kapat (END_OF_BACKTEST).
             # Not: restart recovery bu yolu kullanmaz; on_startup kullanır.
             if self._paper is not None:
